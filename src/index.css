@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/* ─── Tema Tailwind v4 — Paleta MLB 2026 ─────────────────────────────────── */
+
+@theme {
+  /* Tipografías */
+  --font-display: 'Georgia', 'Times New Roman', serif;
+  --font-body: system-ui, sans-serif;
+
+  /* Paleta central */
+  --color-primary:       #0C2340;   /* Azul marino (estilo Yankees/Dodgers) */
+  --color-primary-dark:  #071628;
+  --color-primary-light: #1e3a5f;
+
+  --color-accent:        #C8102E;   /* Rojo (estilo Cardinals/Angels) */
+  --color-accent-dark:   #96001f;
+  --color-accent-light:  #e8394f;
+
+  --color-positive:      #2E8B57;   /* Verde (valor / clasificación) */
+  --color-positive-dark: #1f6b40;
+  --color-positive-light:#4cae72;
+
+  --color-warning:       #E8A317;   /* Ámbar */
+
+  --color-gray-dark:     #4A4A4A;
+  --color-gray-light:    #D6D6D2;   /* "línea de cal" — texto principal sobre fondo oscuro */
+
+  /* Alias semánticos de la app */
+  --color-bg-base:      #0a1628;   /* Fondo principal — azul noche de estadio */
+  --color-bg-card:      #142640;   /* Tarjetas / paneles */
+  --color-bg-elevated:  #1c3355;   /* Hover / elevated */
+}
+
+/* ─── Base ────────────────────────────────────────────────────────────────── */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--color-bg-base);
+  color: var(--color-gray-light);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Spin para el botón de sync */
+@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+
+/* Nav sin scrollbar visible */
+nav [style*="overflow"] { -ms-overflow-style: none; }
+nav [style*="overflow"]::-webkit-scrollbar { display: none; }
+
+/* Scrollbar sutil */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-bg-card); }
+::-webkit-scrollbar-thumb { background: var(--color-primary-light); border-radius: 3px; }
