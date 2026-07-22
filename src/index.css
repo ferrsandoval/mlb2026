@@ -1,57 +1,197 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
-/* ─── Tema Tailwind v4 — Paleta MLB 2026 ─────────────────────────────────── */
+/* =============================================================================
+   Tema PENNANT — MLB Analytics 2026 (dark)
+   Diseño base importado de Claude Design, aplicado sobre la lógica existente.
+   Se conservan los alias --color-* que usa el código para compatibilidad.
+   ============================================================================= */
 
-@theme {
-  /* Tipografías */
-  --font-display: 'Georgia', 'Times New Roman', serif;
-  --font-body: system-ui, sans-serif;
+:root {
+  /* ── Tokens del diseño PENNANT ── */
+  --bg: #0a1420;
+  --bg-2: #0b1a2c;
+  --surface: #101f33;
+  --surface-2: #16273f;
+  --surface-3: #1c3352;
+  --border: rgba(255, 255, 255, .08);
+  --border-2: rgba(255, 255, 255, .14);
 
-  /* Paleta central */
-  --color-primary:       #0C2340;   /* Azul marino (estilo Yankees/Dodgers) */
-  --color-primary-dark:  #071628;
+  --navy: #0C2340;
+  --red: #C8102E;
+  --red-b: #e84259;
+  --green: #34C77B;
+  --green-d: #1f8a55;
+  --amber: #F5B841;
+  --blue: #4C9AFF;
+
+  --text: #EAF1FA;
+  --muted: #93A7BE;
+  --faint: #5d7186;
+
+  --fd: 'Space Grotesk', system-ui, sans-serif;
+  --fu: 'Hanken Grotesk', system-ui, sans-serif;
+  --fm: 'Space Mono', ui-monospace, monospace;
+
+  --r1: 6px;
+  --r2: 10px;
+  --r3: 14px;
+  --r4: 20px;
+  --sh: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 8px 30px -12px rgba(0, 0, 0, .6);
+
+  /* ── Alias de compatibilidad (usados por el código existente) ── */
+  --font-display: var(--fd);
+  --font-body: var(--fu);
+
+  --color-primary: var(--navy);
+  --color-primary-dark: #071628;
   --color-primary-light: #1e3a5f;
 
-  --color-accent:        #C8102E;   /* Rojo (estilo Cardinals/Angels) */
-  --color-accent-dark:   #96001f;
-  --color-accent-light:  #e8394f;
+  --color-accent: var(--red);
+  --color-accent-dark: #96001f;
+  --color-accent-light: var(--red-b);
 
-  --color-positive:      #2E8B57;   /* Verde (valor / clasificación) */
-  --color-positive-dark: #1f6b40;
-  --color-positive-light:#4cae72;
+  --color-positive: var(--green);
+  --color-positive-dark: var(--green-d);
+  --color-positive-light: #4cae72;
 
-  --color-warning:       #E8A317;   /* Ámbar */
+  --color-warning: var(--amber);
 
-  --color-gray-dark:     #4A4A4A;
-  --color-gray-light:    #D6D6D2;   /* "línea de cal" — texto principal sobre fondo oscuro */
+  --color-gray-dark: var(--faint);
+  --color-gray-light: var(--text);
 
-  /* Alias semánticos de la app */
-  --color-bg-base:      #0a1628;   /* Fondo principal — azul noche de estadio */
-  --color-bg-card:      #142640;   /* Tarjetas / paneles */
-  --color-bg-elevated:  #1c3355;   /* Hover / elevated */
+  --color-bg-base: var(--bg);
+  --color-bg-card: var(--surface);
+  --color-bg-elevated: var(--surface-2);
 }
 
-/* ─── Base ────────────────────────────────────────────────────────────────── */
-
-* {
-  box-sizing: border-box;
-}
+/* ── Base ── */
+* { box-sizing: border-box; }
 
 body {
-  background-color: var(--color-bg-base);
-  color: var(--color-gray-light);
-  font-family: var(--font-body);
+  margin: 0;
+  background:
+    radial-gradient(1200px 700px at 80% -10%, rgba(76, 154, 255, .06), transparent 60%),
+    radial-gradient(900px 600px at -10% 10%, rgba(200, 16, 46, .06), transparent 55%),
+    #060d16;
+  color: var(--text);
+  font-family: var(--fu);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Spin para el botón de sync */
-@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+input, select, button, textarea { font-family: inherit; }
+a { color: var(--blue); text-decoration: none; }
+a:hover { color: #7fbaff; }
 
-/* Nav sin scrollbar visible */
-nav [style*="overflow"] { -ms-overflow-style: none; }
-nav [style*="overflow"]::-webkit-scrollbar { display: none; }
+/* ── Animaciones ── */
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-/* Scrollbar sutil */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--color-bg-card); }
-::-webkit-scrollbar-thumb { background: var(--color-primary-light); border-radius: 3px; }
+/* ── Scrollbars ── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .1); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* =============================================================================
+   Layout de la aplicación — sidebar (desktop) / barra inferior (móvil)
+   ============================================================================= */
+
+.pn-shell { min-height: 100vh; display: flex; }
+
+.pn-nav {
+  width: 236px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px 16px;
+  background: rgba(6, 12, 20, .5);
+  border-right: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.pn-brand { padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.pn-navlist { display: flex; flex-direction: column; gap: 2px; }
+.pn-navfoot { display: flex; flex-direction: column; gap: 10px; margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+
+.pn-navbtn {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--muted);
+  font-family: var(--fu);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  transition: background .15s, color .15s;
+}
+.pn-navbtn:hover { color: var(--text); background: rgba(255, 255, 255, .04); }
+.pn-navbtn.is-active { color: var(--text); background: var(--surface-2); font-weight: 600; box-shadow: inset 3px 0 0 var(--red); }
+.pn-navico { font-size: 15px; width: 20px; text-align: center; opacity: .9; }
+.pn-navlbl { white-space: nowrap; }
+
+.pn-main { flex: 1; min-width: 0; padding: 30px 34px 48px; overflow-x: hidden; }
+
+/* Barra superior — sólo móvil */
+.pn-topbar { display: none; }
+
+@media (max-width: 860px) {
+  .pn-shell { flex-direction: column; }
+
+  .pn-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(6, 12, 20, .75);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+
+  .pn-nav {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    width: auto;
+    height: auto;
+    flex-direction: row;
+    gap: 0;
+    padding: 8px 6px;
+    border-right: 0;
+    border-top: 1px solid var(--border);
+    background: rgba(6, 12, 20, .92);
+    backdrop-filter: blur(10px);
+    justify-content: space-around;
+    z-index: 50;
+  }
+
+  .pn-brand, .pn-navfoot { display: none; }
+  .pn-navlist { flex-direction: row; flex: 1; justify-content: space-around; gap: 0; }
+
+  .pn-navbtn { flex-direction: column; gap: 3px; padding: 6px 4px; font-size: 10px; text-align: center; }
+  .pn-navbtn:hover { background: transparent; }
+  .pn-navbtn.is-active { box-shadow: none; background: transparent; color: var(--red-b); }
+  .pn-navico { font-size: 19px; width: auto; }
+
+  .pn-main { padding: 20px 16px 92px; }
+}
+
+/* Ocultar scrollbar horizontal en contenedores marcados */
+.pn-noscroll { -ms-overflow-style: none; scrollbar-width: none; }
+.pn-noscroll::-webkit-scrollbar { display: none; }
+
+/* Postemporada: bracket + panel Monte Carlo */
+.pn-two-col { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .9fr); gap: 16px; align-items: start; }
+@media (max-width: 980px) { .pn-two-col { grid-template-columns: 1fr; } }

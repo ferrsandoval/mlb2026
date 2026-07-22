@@ -1,147 +1,131 @@
 import { useMemo } from 'react'
 import { useStore } from '../store/useStore'
 import TeamBadge from '../components/TeamBadge'
+import PageHeader from '../components/PageHeader'
 import type { GamePrediction } from '../types'
 import type { Team } from '../data/seed'
 
-type ResultCheck = 'exact' | 'outcome' | 'miss' | 'sin-pick'
+type ResultCheck = 'exact' | 'outcome' | 'miss' | 'none'
 
 function checkResult(pick: { homeRuns: number; awayRuns: number } | undefined, realHome: number, realAway: number): ResultCheck {
-  if (!pick) return 'sin-pick'
+  if (!pick) return 'none'
   if (pick.homeRuns === realHome && pick.awayRuns === realAway) return 'exact'
   const realOut = realHome > realAway ? 'home' : 'away'
   const pickOut = pick.homeRuns >= pick.awayRuns ? 'home' : 'away'
   return realOut === pickOut ? 'outcome' : 'miss'
 }
 
-const BADGE: Record<ResultCheck, { label: string; color: string; bg: string }> = {
-  exact:      { label: '✓ Marcador Exacto', color: 'var(--color-positive)', bg: 'rgba(46,139,87,0.15)' },
-  outcome:    { label: '~ Acertó Ganador',   color: 'var(--color-warning)',  bg: 'rgba(232,163,23,0.12)' },
-  miss:       { label: '✗ Falló',            color: 'var(--color-accent)',   bg: 'rgba(200,16,46,0.10)' },
-  'sin-pick': { label: '— Sin predicción',   color: 'rgba(255,255,255,0.25)', bg: 'transparent' },
+const RES: Record<Exclude<ResultCheck, 'none'>, { label: string; color: string; bg: string; bd: string }> = {
+  exact:   { label: 'Exacto',  color: 'var(--green)', bg: 'rgba(52,199,123,.13)', bd: 'rgba(52,199,123,.35)' },
+  outcome: { label: 'Ganador', color: 'var(--amber)', bg: 'rgba(245,184,65,.13)', bd: 'rgba(245,184,65,.35)' },
+  miss:    { label: 'Fallo',   color: 'var(--red-b)', bg: 'rgba(232,66,89,.13)', bd: 'rgba(232,66,89,.35)' },
 }
 
-function Badge({ result }: { result: ResultCheck }) {
-  const b = BADGE[result]
-  return <span className="text-xs font-bold px-2 py-1 rounded" style={{ color: b.color, backgroundColor: b.bg }}>{b.label}</span>
+const COLS = '92px 1fr 88px 88px 104px'
+
+interface Row {
+  id: string; date: string; homeTeam: Team; awayTeam: Team
+  realHome: number; realAway: number
+  model?: { homeRuns: number; awayRuns: number }
+  pick?: { homeRuns: number; awayRuns: number }
+  result: ResultCheck
 }
 
-function ScoreTally({ exact, outcome, miss, total }: { exact: number; outcome: number; miss: number; total: number }) {
-  const pct = (n: number) => total > 0 ? Math.round((n / total) * 100) : 0
+function Tile({ label, value, color, border }: { label: string; value: React.ReactNode; color: string; border: string }) {
   return (
-    <div className="flex gap-3 text-sm flex-wrap">
-      <span className="font-bold" style={{ color: 'var(--color-positive)' }}>{exact} exacto{exact !== 1 ? 's' : ''}</span>
-      <span className="font-bold" style={{ color: 'var(--color-warning)' }}>{outcome} ganador{outcome !== 1 ? 'es' : ''}</span>
-      <span style={{ color: 'var(--color-accent)' }}>{miss} fallo{miss !== 1 ? 's' : ''}</span>
-      <span style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>· {pct(exact + outcome)}% de acierto</span>
+    <div style={{ background: 'var(--surface)', border: `1px solid ${border}`, borderRadius: 12, padding: '14px 15px' }}>
+      <div style={{ fontFamily: 'var(--fm)', fontSize: 11, color }}>{label}</div>
+      <div style={{ fontFamily: 'var(--fd)', fontWeight: 700, fontSize: 26, marginTop: 2 }}>{value}</div>
     </div>
   )
-}
-
-interface AciertoRow {
-  id: string
-  homeTeam: Team
-  awayTeam: Team
-  realHome: number
-  realAway: number
-  modelResult: ResultCheck
-  pickResult: ResultCheck
-  modelPick?: { homeRuns: number; awayRuns: number }
-  pick?: { homeRuns: number; awayRuns: number }
 }
 
 export default function Aciertos() {
   const { games, teams, predictions, personalPicks } = useStore()
 
-  const rows = useMemo(() => {
-    const result: AciertoRow[] = []
+  const rows = useMemo<Row[]>(() => {
+    const out: Row[] = []
     for (const g of games) {
       if (!g.played || g.homeRuns == null || g.awayRuns == null) continue
       const pred = predictions[g.id] as GamePrediction | undefined
-      const topScore = pred?.topScorelines[0]
-      const modelPick = topScore ? { homeRuns: topScore.home, awayRuns: topScore.away } : undefined
-      result.push({
+      const top = pred?.topScorelines[0]
+      const model = top ? { homeRuns: top.home, awayRuns: top.away } : undefined
+      out.push({
         id: g.id,
-        homeTeam: teams[g.homeId],
-        awayTeam: teams[g.awayId],
-        realHome: g.homeRuns,
-        realAway: g.awayRuns,
-        modelResult: checkResult(modelPick, g.homeRuns, g.awayRuns),
-        pickResult: checkResult(personalPicks[g.id], g.homeRuns, g.awayRuns),
-        modelPick,
-        pick: personalPicks[g.id],
+        date: new Date(g.date + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+        homeTeam: teams[g.homeId], awayTeam: teams[g.awayId],
+        realHome: g.homeRuns, realAway: g.awayRuns,
+        model, pick: personalPicks[g.id],
+        result: checkResult(model, g.homeRuns, g.awayRuns),
       })
     }
-    return result
+    return out
   }, [games, teams, predictions, personalPicks])
 
-  const modelStats = useMemo(() => ({
-    exact: rows.filter((r) => r.modelResult === 'exact').length,
-    outcome: rows.filter((r) => r.modelResult === 'outcome').length,
-    miss: rows.filter((r) => r.modelResult === 'miss').length,
-    total: rows.length,
-  }), [rows])
-
-  const pickStats = useMemo(() => ({
-    exact: rows.filter((r) => r.pickResult === 'exact').length,
-    outcome: rows.filter((r) => r.pickResult === 'outcome').length,
-    miss: rows.filter((r) => r.pickResult === 'miss').length,
-    total: rows.filter((r) => r.pickResult !== 'sin-pick').length,
-  }), [rows])
+  const tally = useMemo(() => {
+    const exact = rows.filter((r) => r.result === 'exact').length
+    const winner = rows.filter((r) => r.result === 'outcome').length
+    const miss = rows.filter((r) => r.result === 'miss').length
+    const total = rows.length
+    const pct = total ? Math.round(((exact + winner) / total) * 100) : 0
+    return { exact, winner, miss, pct }
+  }, [rows])
 
   if (rows.length === 0) {
     return (
-      <div className="text-center py-16" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>
-        <p className="text-2xl font-black uppercase mb-2">Sin juegos jugados</p>
-        <p className="text-sm">Los aciertos aparecerán aquí cuando se registren resultados.</p>
-      </div>
+      <section style={{ animation: 'fadein .3s ease' }}>
+        <PageHeader eyebrow="Aciertos · Historial" title="Modelo vs. resultado real" />
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--faint)' }}>
+          <p style={{ fontFamily: 'var(--fd)', fontWeight: 700, fontSize: 18, color: 'var(--muted)' }}>Sin juegos jugados</p>
+          <p style={{ fontSize: 13, marginTop: 6 }}>Los aciertos aparecerán aquí cuando se registren resultados.</p>
+        </div>
+      </section>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-xl p-5 space-y-3" style={{ backgroundColor: 'var(--color-bg-card)', borderLeft: '3px solid var(--color-gray-dark)' }}>
-          <h3 className="font-black text-xl uppercase" style={{ color: 'var(--color-gray-light)' }}>Modelo</h3>
-          <ScoreTally {...modelStats} />
-          <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>{modelStats.total} de {rows.length} juegos</p>
-        </div>
-        <div className="rounded-xl p-5 space-y-3" style={{ backgroundColor: 'var(--color-bg-card)', borderLeft: '3px solid var(--color-accent)' }}>
-          <h3 className="font-black text-xl uppercase" style={{ color: 'var(--color-accent)' }}>Tu Predicción</h3>
-          <ScoreTally {...pickStats} />
-          <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>{pickStats.total} de {rows.length} juegos con predicción</p>
-        </div>
+    <section style={{ animation: 'fadein .3s ease' }}>
+      <PageHeader eyebrow="Aciertos · Historial" title="Modelo vs. resultado real" />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 18 }}>
+        <Tile label="Exactos" value={tally.exact} color="var(--green)" border="rgba(52,199,123,.3)" />
+        <Tile label="Ganador acertado" value={tally.winner} color="var(--amber)" border="rgba(245,184,65,.3)" />
+        <Tile label="Fallos" value={tally.miss} color="var(--red-b)" border="rgba(232,66,89,.3)" />
+        <Tile label="Tasa de acierto" value={`${tally.pct}%`} color="var(--muted)" border="var(--border-2)" />
       </div>
 
-      <div className="space-y-2">
-        {rows.map(({ id, homeTeam, awayTeam, realHome, realAway, modelResult, modelPick, pickResult, pick }) => (
-          <div key={id} className="rounded-xl p-4" style={{ backgroundColor: 'var(--color-bg-card)' }}>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="flex-1 flex items-center justify-end gap-2">
-                <span className="font-black text-base uppercase text-right" style={{ color: 'var(--color-gray-light)' }}>{awayTeam.id} @ {homeTeam.name}</span>
-                <TeamBadge team={homeTeam} size="sm" />
-              </div>
-              <div className="font-black text-2xl px-3 shrink-0" style={{ color: 'var(--color-accent)' }}>{realHome}–{realAway}</div>
-              <div className="flex-1 flex items-center gap-2">
-                <TeamBadge team={awayTeam} size="sm" />
-                <span className="font-black text-base uppercase" style={{ color: 'var(--color-gray-light)' }}>{awayTeam.name}</span>
-              </div>
+      <div style={{ background: 'linear-gradient(180deg,var(--surface-2),var(--surface))', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--sh)' }}>
+        <div className="pn-noscroll" style={{ overflowX: 'auto' }}>
+          <div style={{ minWidth: 520 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: COLS, padding: '11px 16px', fontFamily: 'var(--fm)', fontSize: 10, color: 'var(--faint)', letterSpacing: '.06em', borderBottom: '1px solid var(--border)' }}>
+              <span>FECHA</span><span>JUEGO</span><span style={{ textAlign: 'center' }}>MODELO</span><span style={{ textAlign: 'center' }}>REAL</span><span style={{ textAlign: 'right' }}>RESULTADO</span>
             </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold w-24 shrink-0" style={{ color: 'var(--color-gray-light)', opacity: 0.6 }}>Modelo</span>
-                {modelPick && <span className="font-black text-lg mr-2" style={{ color: 'var(--color-gray-light)' }}>{modelPick.homeRuns}–{modelPick.awayRuns}</span>}
-                <Badge result={modelResult} />
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold w-24 shrink-0" style={{ color: 'var(--color-accent)' }}>Tu pick</span>
-                {pick && <span className="font-black text-lg mr-2" style={{ color: 'var(--color-gray-light)' }}>{pick.homeRuns}–{pick.awayRuns}</span>}
-                <Badge result={pickResult} />
-              </div>
+            <div style={{ padding: '2px 8px' }}>
+              {rows.map((r) => {
+                const res = r.result === 'none' ? null : RES[r.result]
+                return (
+                  <div key={r.id} style={{ display: 'grid', gridTemplateColumns: COLS, alignItems: 'center', padding: '11px 8px', borderRadius: 9 }}>
+                    <span style={{ fontFamily: 'var(--fm)', fontSize: 11.5, color: 'var(--faint)' }}>{r.date}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <TeamBadge team={r.awayTeam} size={26} />
+                      <span style={{ fontFamily: 'var(--fm)', fontSize: 11, color: 'var(--faint)' }}>@</span>
+                      <TeamBadge team={r.homeTeam} size={26} />
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'var(--fm)', fontSize: 13, color: 'var(--muted)' }}>{r.model ? `${r.model.awayRuns}–${r.model.homeRuns}` : '—'}</div>
+                      {r.pick && <div style={{ fontFamily: 'var(--fm)', fontSize: 9.5, color: 'var(--red-b)', marginTop: 1 }}>tú {r.pick.awayRuns}–{r.pick.homeRuns}</div>}
+                    </div>
+                    <span style={{ fontFamily: 'var(--fm)', fontSize: 13, textAlign: 'center', fontWeight: 700 }}>{r.realAway}–{r.realHome}</span>
+                    <span style={{ justifySelf: 'end', fontFamily: 'var(--fm)', fontSize: 11, fontWeight: 700, color: res ? res.color : 'var(--faint)', background: res ? res.bg : 'transparent', border: `1px solid ${res ? res.bd : 'var(--border)'}`, padding: '3px 9px', borderRadius: 20 }}>
+                      {res ? res.label : '—'}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </div>
-        ))}
+        </div>
       </div>
-    </div>
+    </section>
   )
 }

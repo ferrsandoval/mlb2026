@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import TeamBadge from '../components/TeamBadge'
+import PageHeader from '../components/PageHeader'
 import { parsePicksCsv, exportPicksCsv } from '../engine/personalPicks'
 
 export default function Settings() {
   const {
     teams, games, setTeamElo, setTeamAttack, setTeamDefense, registerResult,
     exportJSON, importJSON, resetToSeed, loadPersonalPicks, personalPicks,
+    pitchers, syncPitchers, calibrateFromHistory,
   } = useStore()
 
   const [resultGameId, setResultGameId] = useState('')
@@ -14,6 +16,9 @@ export default function Settings() {
   const [awayRuns, setAwayRuns] = useState('')
   const [resultMsg, setResultMsg] = useState('')
   const [msg, setMsg] = useState('')
+  const [modelMsg, setModelMsg] = useState('')
+  const [pitcherBusy, setPitcherBusy] = useState(false)
+  const [calibBusy, setCalibBusy] = useState(false)
 
   const fileRef = useRef<HTMLInputElement>(null)
   const picksCsvRef = useRef<HTMLInputElement>(null)
@@ -81,6 +86,29 @@ export default function Settings() {
     flash(`✓ ${n} predicción${n !== 1 ? 'es' : ''} exportada${n !== 1 ? 's' : ''}`, setMsg)
   }
 
+  const handleSyncPitchers = async () => {
+    setPitcherBusy(true); setModelMsg('')
+    try {
+      const r = await syncPitchers()
+      if (r.errors.length) setModelMsg(`⚠ ${r.errors[0]}`)
+      else setModelMsg(`✓ ${r.rated} abridor${r.rated !== 1 ? 'es' : ''} con rating FIP · ${r.patched} juego${r.patched !== 1 ? 's' : ''} actualizado${r.patched !== 1 ? 's' : ''}`)
+    } catch { setModelMsg('⚠ Error al sincronizar abridores') }
+    setPitcherBusy(false)
+  }
+
+  const handleCalibrate = async () => {
+    setCalibBusy(true); setModelMsg('')
+    try {
+      const r = await calibrateFromHistory()
+      if (r.errors.length) setModelMsg(`⚠ ${r.errors[0]}`)
+      else {
+        const brierTxt = r.brier != null ? ` · Brier ${r.brier.toFixed(4)} (volado = 0.25)` : ''
+        setModelMsg(`✓ ${r.teamsUpdated} equipos calibrados con ${r.games.toLocaleString('es-MX')} juegos${brierTxt}`)
+      }
+    } catch { setModelMsg('⚠ Error al calibrar con historial') }
+    setCalibBusy(false)
+  }
+
   const handleReset = () => {
     if (confirm('¿Reiniciar todo al estado semilla? Se perderán los resultados registrados.')) {
       resetToSeed()
@@ -91,7 +119,39 @@ export default function Settings() {
   const sortedTeams = Object.values(teams).sort((a, b) => a.league.localeCompare(b.league) || a.division.localeCompare(b.division) || a.name.localeCompare(b.name))
 
   return (
-    <div className="space-y-8">
+    <section className="space-y-8" style={{ animation: 'fadein .3s ease' }}>
+      <PageHeader eyebrow="Ajustes · Configuración" title="Datos, ratings y resultados" />
+
+      {/* Modelo estadístico (béisbol) */}
+      <div className="rounded-xl p-6" style={{ backgroundColor: 'var(--color-bg-card)', borderLeft: '3px solid var(--color-primary-light)' }}>
+        <h2 className="font-black text-2xl uppercase mb-1" style={{ color: 'var(--color-gray-light)' }}>Modelo Estadístico</h2>
+        <p className="text-xs mb-5" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>
+          Marcador con Binomial Negativa (colas de carreras reales), ajuste por abridor probable (FIP) y calibración
+          de ataque/defensa con historial. <b>Sincroniza primero el calendario oficial</b> (pestaña Calendario) — eso
+          ya descarga los abridores. Úsalo aquí para <b>refrescar</b> los probables, que MLB anuncia a diario y solo
+          ~5 días antes de cada juego.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button onClick={handleSyncPitchers} disabled={pitcherBusy}
+            className="font-bold text-sm px-5 py-3 rounded-lg transition-opacity disabled:opacity-40 text-left"
+            style={{ backgroundColor: 'var(--color-bg-base)', color: 'var(--color-gray-light)', border: '1px solid var(--color-primary)' }}>
+            <span className="block">{pitcherBusy ? '⟳ Obteniendo abridores…' : '⚾ Sincronizar abridores probables'}</span>
+            <span className="block text-xs font-normal mt-1" style={{ opacity: 0.55 }}>
+              Trae el FIP del abridor de cada juego pendiente ({Object.keys(pitchers).length} con rating)
+            </span>
+          </button>
+          <button onClick={handleCalibrate} disabled={calibBusy}
+            className="font-bold text-sm px-5 py-3 rounded-lg transition-opacity disabled:opacity-40 text-left"
+            style={{ backgroundColor: 'var(--color-bg-base)', color: 'var(--color-gray-light)', border: '1px solid var(--color-primary)' }}>
+            <span className="block">{calibBusy ? '⟳ Calibrando…' : '📈 Calibrar ratings con historial'}</span>
+            <span className="block text-xs font-normal mt-1" style={{ opacity: 0.55 }}>
+              Ajusta ataque/defensa con /history.csv (Maher) y reporta el Brier
+            </span>
+          </button>
+        </div>
+        {modelMsg && <p className="mt-4 text-sm font-bold" style={{ color: modelMsg.startsWith('⚠') ? 'var(--color-accent)' : 'var(--color-positive)' }}>{modelMsg}</p>}
+      </div>
+
       {/* Registrar resultado */}
       <div className="rounded-xl p-6" style={{ backgroundColor: 'var(--color-bg-card)' }}>
         <h2 className="font-black text-2xl uppercase mb-5" style={{ color: 'var(--color-gray-light)' }}>Registrar Resultado</h2>
@@ -201,6 +261,6 @@ export default function Settings() {
       </div>
 
       {msg && <p className="text-sm font-bold text-center py-2" style={{ color: 'var(--color-positive)' }}>{msg}</p>}
-    </div>
+    </section>
   )
 }

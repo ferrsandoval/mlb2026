@@ -1,10 +1,13 @@
 // =============================================================================
 // poisson.ts — Motor estadístico central: carreras esperadas y matriz de marcador
 // -----------------------------------------------------------------------------
-// Adaptado del modelo de goles de fútbol a carreras de béisbol. Se usa Poisson
-// independiente por equipo (sin corrección Dixon-Coles: esa corrección modela
-// una correlación específica de marcadores bajos de fútbol que no aplica a la
-// distribución de carreras de béisbol).
+// Modelo específico de béisbol. Las carreras por equipo NO son Poisson: están
+// sobredispersas (varianza > media) por el efecto "inning grande" — una vez que
+// hay corredores en base, anotar se agrupa. Por eso el marcador se modela con
+// una BINOMIAL NEGATIVA por equipo (mezcla Poisson-Gamma), que conserva la media
+// esperada (λ) pero engorda las colas: predice mejor blanqueadas y palizas, y
+// por tanto over/under y marcador exacto. Con RUN_DISPERSION → ∞ se recupera
+// Poisson. Los dos equipos se tratan como independientes.
 // =============================================================================
 
 import type { Team, Game } from '../data/seed'
@@ -14,17 +17,62 @@ export const ENGINE_PARAMS = {
   HOME_ELO_BONUS: 24,   // ventaja de localía en puntos Elo (todo equipo es local en casa)
   RUN_BASE: 4.3,        // carreras esperadas por equipo, liga promedio, por juego
   ELO_DIVISOR: 200,
-  GRID_MAX: 14,         // marcadores de 0..13 carreras cubren >99.9% de la masa
+  GRID_MAX: 20,         // colas más gruesas que Poisson → rejilla mayor para capturar la masa
   MIN_LAMBDA: 0.5,
+  // Parámetro de dispersión r de la Binomial Negativa (var = μ + μ²/r).
+  // r≈4 reproduce la desviación estándar real de carreras/equipo/juego (~3.0).
+  // Usa Infinity para volver al modelo Poisson.
+  RUN_DISPERSION: 4.0,
 }
 
-// ─── Poisson ──────────────────────────────────────────────────────────────────
+// ─── Función log-gamma (Lanczos) — necesaria para la Binomial Negativa ─────────
+
+const LANCZOS = [
+  0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+  771.32342877765313, -176.61502916214059, 12.507343278686905,
+  -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
+]
+
+export function logGamma(x: number): number {
+  if (x < 0.5) {
+    // Reflexión: Γ(x)Γ(1-x) = π / sin(πx)
+    return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x)
+  }
+  x -= 1
+  let a = LANCZOS[0]
+  const t = x + 7.5
+  for (let i = 1; i < LANCZOS.length; i++) a += LANCZOS[i] / (x + i)
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a)
+}
+
+// ─── Distribuciones de carreras ────────────────────────────────────────────────
 
 export function poissonPmf(lambda: number, k: number): number {
   if (k < 0 || !Number.isInteger(k)) return 0
   let logP = -lambda + k * Math.log(lambda)
   for (let i = 1; i <= k; i++) logP -= Math.log(i)
   return Math.exp(logP)
+}
+
+/**
+ * P(X = k) para X ~ Binomial Negativa con media `mean` y dispersión `size` (r).
+ * Var(X) = mean + mean²/r. Con size = ∞ equivale a Poisson(mean).
+ */
+export function negBinomPmf(mean: number, size: number, k: number): number {
+  if (k < 0 || !Number.isInteger(k)) return 0
+  if (!Number.isFinite(size)) return poissonPmf(mean, k)
+  if (mean <= 0) return k === 0 ? 1 : 0
+  const r = size
+  const p = r / (r + mean) // "prob de éxito" en la parametrización clásica
+  const logP =
+    logGamma(k + r) - logGamma(r) - logGamma(k + 1) +
+    r * Math.log(p) + k * Math.log(1 - p)
+  return Math.exp(logP)
+}
+
+/** pmf de carreras del motor: Binomial Negativa (o Poisson si dispersion = ∞). */
+export function runPmf(mean: number, k: number, dispersion = ENGINE_PARAMS.RUN_DISPERSION): number {
+  return Number.isFinite(dispersion) ? negBinomPmf(mean, dispersion, k) : poissonPmf(mean, k)
 }
 
 // ─── λ desde Elo ──────────────────────────────────────────────────────────────
@@ -35,23 +83,42 @@ export interface LambdaResult {
 }
 
 /**
- * Carreras esperadas usando Elo (supremacía base) × factor ataque/defensa
- * por equipo (media geométrica, mismo enfoque que el modelo de fútbol).
+ * Contexto del enfrentamiento que ajusta las carreras esperadas más allá del
+ * rating de equipo. `homePitcherFactor` es el factor de supresión del ABRIDOR
+ * LOCAL (afecta las carreras del VISITANTE); `awayPitcherFactor`, el del abridor
+ * visitante (afecta al local). 1 = neutro (sin dato de abridor). Ver pitchers.ts.
+ */
+export interface MatchupContext {
+  homePitcherFactor?: number
+  awayPitcherFactor?: number
+}
+
+/**
+ * Carreras esperadas por equipo. Estructura tipo log5/Maher:
+ *   λ_local = base × supremacía(Elo) × ataque_local × defensa_visitante × abridor_visitante
+ * El PRODUCTO ataque×defensa (no media geométrica) es la forma estándar de
+ * béisbol y hace que este cálculo sea idéntico al de los ratings Maher
+ * (attack = e^α, defense = e^β) cuando se calibra con historial. Cada abridor
+ * suprime las carreras del equipo RIVAL.
  */
 export function computeLambdas(
   homeTeam: Pick<Team, 'elo' | 'attack' | 'defense'>,
   awayTeam: Pick<Team, 'elo' | 'attack' | 'defense'>,
   params = ENGINE_PARAMS,
+  ctx: MatchupContext = {},
 ): LambdaResult {
   const d = (homeTeam.elo + params.HOME_ELO_BONUS) - awayTeam.elo
   const supremacy = d / params.ELO_DIVISOR
   const B = params.RUN_BASE
 
-  const adjHome = Math.sqrt(homeTeam.attack * awayTeam.defense)
-  const adjAway = Math.sqrt(awayTeam.attack * homeTeam.defense)
+  const offHome = homeTeam.attack * awayTeam.defense
+  const offAway = awayTeam.attack * homeTeam.defense
 
-  const lambdaHome = Math.max(params.MIN_LAMBDA, (B + supremacy / 2) * adjHome)
-  const lambdaAway = Math.max(params.MIN_LAMBDA, (B - supremacy / 2) * adjAway)
+  const suppressHome = ctx.awayPitcherFactor ?? 1 // abridor visitante frena al local
+  const suppressAway = ctx.homePitcherFactor ?? 1 // abridor local frena al visitante
+
+  const lambdaHome = Math.max(params.MIN_LAMBDA, (B + supremacy / 2) * offHome * suppressHome)
+  const lambdaAway = Math.max(params.MIN_LAMBDA, (B - supremacy / 2) * offAway * suppressAway)
 
   return { lambdaHome, lambdaAway }
 }
@@ -82,8 +149,9 @@ export function buildScoreMatrix(
   const N = params.GRID_MAX
   const grid: number[][] = Array.from({ length: N }, () => new Array(N).fill(0))
 
-  const pmfHome = Array.from({ length: N }, (_, k) => poissonPmf(lambdaHome, k))
-  const pmfAway = Array.from({ length: N }, (_, k) => poissonPmf(lambdaAway, k))
+  const r = params.RUN_DISPERSION
+  const pmfHome = Array.from({ length: N }, (_, k) => runPmf(lambdaHome, k, r))
+  const pmfAway = Array.from({ length: N }, (_, k) => runPmf(lambdaAway, k, r))
 
   let total = 0
   for (let i = 0; i < N; i++) {
@@ -144,8 +212,9 @@ export function predictGame(
   homeTeam: Pick<Team, 'elo' | 'attack' | 'defense'>,
   awayTeam: Pick<Team, 'elo' | 'attack' | 'defense'>,
   params = ENGINE_PARAMS,
+  ctx: MatchupContext = {},
 ): GamePrediction {
-  const { lambdaHome, lambdaAway } = computeLambdas(homeTeam, awayTeam, params)
+  const { lambdaHome, lambdaAway } = computeLambdas(homeTeam, awayTeam, params, ctx)
   const matrix = buildScoreMatrix(lambdaHome, lambdaAway, params)
 
   return {
@@ -168,12 +237,13 @@ export function predictGame(
 export function predictAll(
   games: Game[],
   teamsById: Record<string, Team>,
+  ctxByGame: Record<string, MatchupContext> = {},
 ): Record<string, GamePrediction> {
   const result: Record<string, GamePrediction> = {}
   for (const g of games) {
     const home = teamsById[g.homeId]
     const away = teamsById[g.awayId]
-    if (home && away) result[g.id] = predictGame(g, home, away)
+    if (home && away) result[g.id] = predictGame(g, home, away, ENGINE_PARAMS, ctxByGame[g.id])
   }
   return result
 }

@@ -2,7 +2,7 @@
 // personalPicks.ts — Predicciones personales de marcador y evaluación del modelo
 // =============================================================================
 
-import { poissonPmf } from './poisson'
+import { runPmf } from './poisson'
 
 export interface PersonalPick {
   homeRuns: number
@@ -14,9 +14,9 @@ export function pickOutcome(pick: PersonalPick): 'home' | 'away' {
   return pick.homeRuns >= pick.awayRuns ? 'home' : 'away'
 }
 
-/** P(marcador exacto) usando Poisson independiente. */
+/** P(marcador exacto) usando Binomial Negativa independiente por equipo. */
 export function pExactScore(homeRuns: number, awayRuns: number, lambdaHome: number, lambdaAway: number): number {
-  return poissonPmf(lambdaHome, homeRuns) * poissonPmf(lambdaAway, awayRuns)
+  return runPmf(lambdaHome, homeRuns) * runPmf(lambdaAway, awayRuns)
 }
 
 /** P(resultado correcto) según el marcador predicho. */

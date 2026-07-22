@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { poissonPmf, computeLambdas, buildScoreMatrix } from './poisson'
+import { poissonPmf, negBinomPmf, runPmf, logGamma, computeLambdas, buildScoreMatrix } from './poisson'
 
 describe('poissonPmf', () => {
   it('k negativo → 0', () => expect(poissonPmf(4, -1)).toBe(0))
@@ -7,6 +7,54 @@ describe('poissonPmf', () => {
     let sum = 0
     for (let k = 0; k < 40; k++) sum += poissonPmf(4.3, k)
     expect(sum).toBeCloseTo(1, 5)
+  })
+})
+
+describe('logGamma', () => {
+  it('logGamma(n) = log((n-1)!)', () => {
+    expect(logGamma(1)).toBeCloseTo(0, 6)        // 0! = 1
+    expect(logGamma(5)).toBeCloseTo(Math.log(24), 6) // 4! = 24
+    expect(Math.exp(logGamma(6))).toBeCloseTo(120, 4)
+  })
+})
+
+describe('negBinomPmf', () => {
+  it('k negativo o no entero → 0', () => {
+    expect(negBinomPmf(4.3, 4, -1)).toBe(0)
+    expect(negBinomPmf(4.3, 4, 2.5)).toBe(0)
+  })
+  it('suma de la distribución ≈ 1', () => {
+    let sum = 0
+    for (let k = 0; k < 60; k++) sum += negBinomPmf(4.3, 4, k)
+    expect(sum).toBeCloseTo(1, 5)
+  })
+  it('conserva la media (E[X] ≈ mean)', () => {
+    let mean = 0
+    for (let k = 0; k < 80; k++) mean += k * negBinomPmf(4.3, 4, k)
+    expect(mean).toBeCloseTo(4.3, 3)
+  })
+  it('sobredispersa: Var = mean + mean²/r', () => {
+    const mu = 4.3, r = 4
+    let m = 0, m2 = 0
+    for (let k = 0; k < 100; k++) { const p = negBinomPmf(mu, r, k); m += k * p; m2 += k * k * p }
+    const varNB = m2 - m * m
+    expect(varNB).toBeCloseTo(mu + (mu * mu) / r, 2)
+    expect(varNB).toBeGreaterThan(mu) // más ancha que Poisson (Var = mean)
+  })
+  it('size → ∞ recupera Poisson', () => {
+    for (const k of [0, 2, 5, 9]) {
+      expect(negBinomPmf(4.3, Infinity, k)).toBeCloseTo(poissonPmf(4.3, k), 9)
+    }
+  })
+})
+
+describe('runPmf', () => {
+  it('con dispersión finita difiere de Poisson (colas más gruesas)', () => {
+    expect(runPmf(4.3, 12, 4)).toBeGreaterThan(poissonPmf(4.3, 12)) // paliza más probable
+    expect(runPmf(4.3, 0, 4)).toBeGreaterThan(poissonPmf(4.3, 0))   // blanqueada más probable
+  })
+  it('con dispersión ∞ = Poisson', () => {
+    expect(runPmf(4.3, 5, Infinity)).toBeCloseTo(poissonPmf(4.3, 5), 9)
   })
 })
 

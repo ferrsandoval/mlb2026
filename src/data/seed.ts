@@ -37,6 +37,8 @@ export interface Game {
   played?: boolean;
   homeRuns?: number;
   awayRuns?: number;
+  homePitcherId?: string; // abridor probable local (id de la MLB Stats API, como string)
+  awayPitcherId?: string; // abridor probable visitante
 }
 
 // -----------------------------------------------------------------------------

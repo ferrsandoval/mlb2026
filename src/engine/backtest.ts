@@ -83,6 +83,39 @@ export function walkForwardBacktest(
   }
 }
 
+/**
+ * Backtest de holdout: entrena los ratings UNA sola vez con el primer `trainFrac`
+ * del historial y evalúa Brier/LogLoss en el tramo final no visto. Mucho más
+ * barato que el walk-forward (O(n) en vez de O(n²)) — apto para correr en vivo en
+ * el navegador y reportar la calidad del modelo al calibrar con historial real.
+ */
+export function holdoutBacktest(
+  games: HistGame[],
+  factory: PredictorFactory,
+  params: Record<string, number>,
+  trainFrac = 0.85,
+): BacktestResult {
+  const cut = Math.floor(games.length * trainFrac)
+  const train = games.slice(0, cut)
+  const test = games.slice(cut)
+  if (test.length === 0 || train.length === 0) return { n: 0, avgBrier: 0, avgLogLoss: 0, entries: [] }
+
+  const predictor = factory(params, train)
+  const entries: BacktestEntry[] = test.map((g) => {
+    const probs = predictor(g.homeId, g.awayId)
+    const result = gameOutcome(g)
+    return { date: g.date, homeId: g.homeId, awayId: g.awayId, probs, result, brier: brier(probs, result), logLoss: logLoss(probs, result) }
+  })
+
+  const n = entries.length
+  return {
+    n,
+    avgBrier:   entries.reduce((s, e) => s + e.brier, 0)   / n,
+    avgLogLoss: entries.reduce((s, e) => s + e.logLoss, 0) / n,
+    entries,
+  }
+}
+
 export function gridSearch(
   games: HistGame[],
   paramGrid: Record<string, number>[],

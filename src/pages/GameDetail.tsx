@@ -17,6 +17,9 @@ interface Props {
 
 export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBack }: Props) {
   const { odds, setOdds, valueThreshold, kellyFraction, personalPicks, setPersonalPick, registerResult } = useStore()
+  const pitchers = useStore((s) => s.pitchers)
+  const homePitcher = game.homePitcherId ? pitchers[game.homePitcherId] : undefined
+  const awayPitcher = game.awayPitcherId ? pitchers[game.awayPitcherId] : undefined
 
   const storedOdds = odds[game.id] ?? { home: null, away: null }
   const personalPick = personalPicks[game.id] ?? null
@@ -88,6 +91,11 @@ export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBac
             <p className="font-black text-2xl uppercase" style={{ color: 'var(--color-gray-light)' }}>{homeTeam.name}</p>
             <p className="text-sm" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>Elo {homeTeam.elo}</p>
             <p className="text-lg font-bold" style={{ color: 'var(--color-primary-light)' }}>λ {fmt2(prediction.lambdaHome)}</p>
+            {homePitcher && (
+              <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.6 }}>
+                ⚾ {homePitcher.name} · FIP {fmt2(homePitcher.fip)}
+              </p>
+            )}
           </div>
           <div className="text-center shrink-0">
             {game.played ? (
@@ -101,6 +109,11 @@ export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBac
             <p className="font-black text-2xl uppercase" style={{ color: 'var(--color-gray-light)' }}>{awayTeam.name}</p>
             <p className="text-sm" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>Elo {awayTeam.elo}</p>
             <p className="text-lg font-bold" style={{ color: 'var(--color-accent)' }}>λ {fmt2(prediction.lambdaAway)}</p>
+            {awayPitcher && (
+              <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.6 }}>
+                ⚾ {awayPitcher.name} · FIP {fmt2(awayPitcher.fip)}
+              </p>
+            )}
           </div>
         </div>
       </div>

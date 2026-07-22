@@ -14,7 +14,7 @@
 
 import type { Team, League } from '../data/seed'
 import { ALL_DIVISION_KEYS, DIVISIONS } from '../data/seed'
-import { computeLambdas } from './poisson'
+import { computeLambdas, ENGINE_PARAMS } from './poisson'
 import {
   createWildCardRound, createDivisionSeries, createLeagueChampionship, createWorldSeries,
   gamesToWin,
@@ -48,6 +48,39 @@ export function samplePoisson(lambda: number, rng: () => number): number {
   return k - 1
 }
 
+// ─── Muestreo Gamma (Marsaglia-Tsang) y Binomial Negativa ─────────────────────
+// La Binomial Negativa se genera como mezcla Poisson-Gamma: se muestrea una tasa
+// λ' ~ Gamma(r, μ/r) y luego el conteo ~ Poisson(λ'). Var = μ + μ²/r, igual que
+// la pmf de runPmf en poisson.ts (marcador y simulación usan la misma ley).
+
+function sampleNormal(rng: () => number): number {
+  let u = 0, v = 0
+  while (u === 0) u = rng()
+  while (v === 0) v = rng()
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
+}
+
+export function sampleGamma(shape: number, rng: () => number): number {
+  if (shape < 1) return sampleGamma(shape + 1, rng) * Math.pow(rng() || 1e-12, 1 / shape)
+  const d = shape - 1 / 3
+  const c = 1 / Math.sqrt(9 * d)
+  for (;;) {
+    let x: number, v: number
+    do { x = sampleNormal(rng); v = 1 + c * x } while (v <= 0)
+    v = v * v * v
+    const u = rng()
+    if (u < 1 - 0.0331 * x * x * x * x) return d * v
+    if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v
+  }
+}
+
+export function sampleNegBinom(mean: number, size: number, rng: () => number): number {
+  if (mean <= 0) return 0
+  if (!Number.isFinite(size)) return samplePoisson(mean, rng)
+  const lambda = sampleGamma(size, rng) * (mean / size)
+  return samplePoisson(lambda, rng)
+}
+
 // ─── Simular un juego (con resolución de innings extra) ───────────────────────
 
 function simulateGameWinner(
@@ -56,8 +89,9 @@ function simulateGameWinner(
   rng: () => number,
 ): 'home' | 'away' {
   const { lambdaHome, lambdaAway } = computeLambdas(home, away)
-  const hr = samplePoisson(lambdaHome, rng)
-  const ar = samplePoisson(lambdaAway, rng)
+  const r = ENGINE_PARAMS.RUN_DISPERSION
+  const hr = sampleNegBinom(lambdaHome, r, rng)
+  const ar = sampleNegBinom(lambdaAway, r, rng)
   if (hr > ar) return 'home'
   if (ar > hr) return 'away'
   return rng() < lambdaHome / (lambdaHome + lambdaAway) ? 'home' : 'away'

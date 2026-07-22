@@ -5,6 +5,7 @@
 import type { Game, Team, League, DivisionKey } from '../data/seed'
 import { DIVISIONS } from '../data/seed'
 import type { GamePrediction } from '../types'
+import { pythagenpatWinPct } from './winprob'
 
 export interface TeamStanding {
   team: Team
@@ -14,7 +15,7 @@ export interface TeamStanding {
   runsFor: number
   runsAgainst: number
   played: number
-  // Proyectado (modelo Poisson) sobre juegos pendientes
+  // Proyectado (matriz Binomial Negativa) sobre juegos pendientes
   xWins: number
   xRunsFor: number
   xRunsAgainst: number
@@ -22,12 +23,18 @@ export interface TeamStanding {
   projWins: number
   projWinPct: number
   runDiff: number
+  // Pythagenpat: % de victorias "merecido" según el diferencial de carreras
+  // REAL acumulado. Suele anticipar el récord futuro mejor que el récord actual
+  // (descuenta la suerte en juegos de una carrera). null hasta que haya juegos.
+  pythWinPct: number | null
+  pythProjWins: number
 }
 
 function emptyStanding(team: Team): TeamStanding {
   return {
     team, wins: 0, losses: 0, runsFor: 0, runsAgainst: 0, played: 0,
     xWins: 0, xRunsFor: 0, xRunsAgainst: 0, projWins: 0, projWinPct: 0, runDiff: 0,
+    pythWinPct: null, pythProjWins: 0,
   }
 }
 
@@ -63,6 +70,12 @@ function finalize(standings: Record<string, TeamStanding>, teamIds: string[]) {
     s.runDiff = (s.runsFor + s.xRunsFor) - (s.runsAgainst + s.xRunsAgainst)
     s.projWins = s.wins + s.xWins
     s.projWinPct = s.projWins / 162
+    // Pythagenpat sobre el diferencial de carreras REAL (solo juegos jugados).
+    if (s.played > 0) {
+      s.pythWinPct = pythagenpatWinPct(s.runsFor, s.runsAgainst, s.played)
+      // Proyección "merecida": ritmo Pythagenpat aplicado a lo jugado + modelo en lo pendiente.
+      s.pythProjWins = s.pythWinPct * s.played + s.xWins
+    }
   }
 }
 

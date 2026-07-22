@@ -2,15 +2,28 @@ import { useState, useMemo } from 'react'
 import { useStore } from '../store/useStore'
 import GameCard from '../components/GameCard'
 import GameDetail from './GameDetail'
+import PageHeader from '../components/PageHeader'
 import { TEAMS } from '../data/seed'
+import { analyzeValue } from '../engine/value'
 
-type FilterMode = 'date' | 'team'
+const chipBtn: React.CSSProperties = {
+  padding: '8px 12px', background: 'transparent', border: 0, color: 'var(--muted)',
+  fontFamily: 'var(--fu)', fontSize: 13, cursor: 'pointer',
+}
+
+function StatChip({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px' }}>
+      <div style={{ color: 'var(--faint)', fontFamily: 'var(--fm)', fontSize: 11 }}>{label}</div>
+      <div style={{ fontFamily: 'var(--fd)', fontWeight: 700, fontSize: 18, marginTop: 2, color: color ?? 'var(--text)' }}>{value}</div>
+    </div>
+  )
+}
 
 export default function Schedule() {
-  const { teams, games, predictions, personalPicks, scheduleSource, syncSchedule, syncScores } = useStore()
+  const { teams, games, predictions, personalPicks, odds, valueThreshold, kellyFraction, scheduleSource, syncSchedule } = useStore()
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null)
-  const [filterMode, setFilterMode] = useState<FilterMode>('date')
-  const [selectedTeam, setSelectedTeam] = useState<string>(TEAMS[0].id)
+  const [selectedTeam, setSelectedTeam] = useState<string>('')
   const [syncMsg, setSyncMsg] = useState('')
   const [syncing, setSyncing] = useState(false)
 
@@ -27,30 +40,25 @@ export default function Schedule() {
     () => games.filter((g) => g.homeId === selectedTeam || g.awayId === selectedTeam).sort((a, b) => a.date.localeCompare(b.date)),
     [games, selectedTeam],
   )
+  const byTeam = selectedTeam !== ''
+  const shown = byTeam ? teamGames : dateGames
 
-  const shown = filterMode === 'date' ? dateGames : teamGames
+  const valueCount = useMemo(() => shown.filter((g) => {
+    const o = odds[g.id]; const p = predictions[g.id]
+    if (!o || !p) return false
+    const va = analyzeValue(o, { home: p.probHome, away: p.probAway }, valueThreshold, kellyFraction)
+    return !!va && (va.markets.home.hasValue || va.markets.away.hasValue)
+  }).length, [shown, odds, predictions, valueThreshold, kellyFraction])
+
+  const doneCount = shown.filter((g) => g.played).length
 
   const handleSyncSchedule = async () => {
-    setSyncing(true)
-    setSyncMsg('')
+    setSyncing(true); setSyncMsg('')
     try {
       const r = await syncSchedule()
-      setSyncMsg(`✓ Calendario oficial cargado (${r.added} juegos${r.unmatched.length ? `, ${r.unmatched.length} sin coincidencia` : ''})`)
-    } catch {
-      setSyncMsg('✗ Error al sincronizar calendario')
-    }
-    setSyncing(false)
-  }
-
-  const handleSyncScores = async () => {
-    setSyncing(true)
-    setSyncMsg('')
-    try {
-      const r = await syncScores()
-      setSyncMsg(r.errors.length ? '✗ ' + r.errors[0] : `✓ ${r.updated} resultado${r.updated !== 1 ? 's' : ''} actualizado${r.updated !== 1 ? 's' : ''}`)
-    } catch {
-      setSyncMsg('✗ Error al sincronizar resultados')
-    }
+      const pitcherTxt = r.rated > 0 ? ` · ${r.rated} abridores con rating FIP` : ''
+      setSyncMsg(`✓ Calendario oficial cargado (${r.added} juegos${r.unmatched.length ? `, ${r.unmatched.length} sin coincidencia` : ''})${pitcherTxt}`)
+    } catch { setSyncMsg('✗ Error al sincronizar calendario') }
     setSyncing(false)
   }
 
@@ -67,78 +75,80 @@ export default function Schedule() {
     )
   }
 
+  const title = byTeam
+    ? teams[selectedTeam]?.name ?? 'Equipo'
+    : activeDate
+      ? new Date(activeDate + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      : '—'
+
   return (
-    <div>
-      {/* Barra de sincronización */}
-      <div className="mb-4 rounded-xl p-3 flex flex-wrap items-center gap-2" style={{ backgroundColor: 'var(--color-bg-card)' }}>
-        <span className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>
-          Calendario: {scheduleSource === 'synthetic' ? 'sintético (placeholder)' : 'oficial MLB Stats API'}
-        </span>
-        <div className="flex-1" />
+    <section style={{ animation: 'fadein .3s ease' }}>
+      <PageHeader
+        eyebrow="Calendario · Schedule"
+        title={title.charAt(0).toUpperCase() + title.slice(1)}
+        right={
+          <>
+            {!byTeam && (
+              <div style={{ display: 'flex', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+                <button style={chipBtn} onClick={() => setDateIdx((i) => Math.max(0, i - 1))}>‹</button>
+                <button style={{ ...chipBtn, background: 'var(--surface-2)', borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)', color: 'var(--text)', fontFamily: 'var(--fm)', fontSize: 12 }}
+                  onClick={() => {
+                    const today = new Date().toISOString().slice(0, 10)
+                    const idx = allDates.findIndex((d) => d >= today)
+                    setDateIdx(idx === -1 ? 0 : idx)
+                  }}>Hoy</button>
+                <button style={chipBtn} onClick={() => setDateIdx((i) => Math.min(allDates.length - 1, i + 1))}>›</button>
+              </div>
+            )}
+            <select
+              value={selectedTeam}
+              onChange={(e) => setSelectedTeam(e.target.value)}
+              style={{ padding: '8px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', fontFamily: 'var(--fu)', fontSize: 13, cursor: 'pointer' }}
+            >
+              <option value="">Todos los equipos</option>
+              {TEAMS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </>
+        }
+      />
+
+      {/* Sincronización con MLB Stats API */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16, fontFamily: 'var(--fm)', fontSize: 11 }}>
+        <span style={{ color: 'var(--faint)' }}>Fuente: {scheduleSource === 'synthetic' ? 'calendario sintético' : 'oficial MLB Stats API'}</span>
         <button onClick={handleSyncSchedule} disabled={syncing}
-          className="text-xs font-bold px-3 py-1.5 rounded-full"
-          style={{ backgroundColor: 'var(--color-primary)', color: 'white', opacity: syncing ? 0.6 : 1 }}>
+          style={{ padding: '5px 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', cursor: syncing ? 'wait' : 'pointer', fontSize: 11 }}>
           Sincronizar calendario oficial
         </button>
-        <button onClick={handleSyncScores} disabled={syncing}
-          className="text-xs font-bold px-3 py-1.5 rounded-full"
-          style={{ backgroundColor: 'var(--color-positive)', color: 'white', opacity: syncing ? 0.6 : 1 }}>
-          Sincronizar resultados
-        </button>
-        {syncMsg && <span className="text-xs" style={{ color: 'var(--color-gray-light)' }}>{syncMsg}</span>}
+        {syncMsg && <span style={{ color: 'var(--muted)' }}>{syncMsg}</span>}
       </div>
 
-      {/* Controles de filtro */}
-      <div className="mb-5 space-y-2">
-        <div className="flex gap-2 flex-wrap">
-          {([['date', 'Por Fecha'], ['team', 'Por Equipo']] as [FilterMode, string][]).map(([mode, label]) => (
-            <button key={mode} onClick={() => setFilterMode(mode)}
-              className="text-xs font-bold px-3 py-1.5 rounded-full uppercase tracking-wide transition-colors"
-              style={{ backgroundColor: filterMode === mode ? 'var(--color-primary)' : 'var(--color-bg-card)', color: 'var(--color-gray-light)' }}>
-              {label}
-            </button>
-          ))}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+        <StatChip label="Juegos" value={shown.length} />
+        <StatChip label="Con valor" value={valueCount} color="var(--green)" />
+        <StatChip label="Finalizados" value={doneCount} />
+      </div>
+
+      {shown.length === 0 ? (
+        <p style={{ textAlign: 'center', padding: '40px 0', fontSize: 13, color: 'var(--faint)' }}>Sin juegos para mostrar.</p>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(340px,1fr))', gap: 12 }}>
+          {shown.map((game) => {
+            const pred = predictions[game.id]
+            if (!pred) return null
+            return (
+              <GameCard
+                key={game.id}
+                game={game}
+                homeTeam={teams[game.homeId]}
+                awayTeam={teams[game.awayId]}
+                prediction={pred}
+                personalPick={personalPicks[game.id]}
+                onClick={() => setSelectedGameId(game.id)}
+              />
+            )
+          })}
         </div>
-
-        {filterMode === 'date' ? (
-          <div className="flex items-center gap-3">
-            <button onClick={() => setDateIdx((i) => Math.max(0, i - 1))}
-              className="px-3 py-1 rounded-full text-sm" style={{ backgroundColor: 'var(--color-bg-card)', color: 'var(--color-gray-light)' }}>←</button>
-            <span className="text-sm font-bold" style={{ color: 'var(--color-gray-light)' }}>
-              {activeDate ? new Date(activeDate + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }) : '—'}
-            </span>
-            <button onClick={() => setDateIdx((i) => Math.min(allDates.length - 1, i + 1))}
-              className="px-3 py-1 rounded-full text-sm" style={{ backgroundColor: 'var(--color-bg-card)', color: 'var(--color-gray-light)' }}>→</button>
-          </div>
-        ) : (
-          <select value={selectedTeam} onChange={(e) => setSelectedTeam(e.target.value)}
-            className="rounded-lg px-3 py-2 text-sm"
-            style={{ backgroundColor: 'var(--color-bg-card)', color: 'var(--color-gray-light)', border: '1px solid var(--color-primary)' }}>
-            {TEAMS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-        )}
-      </div>
-
-      <div className="space-y-3">
-        {shown.length === 0 && (
-          <p className="text-center py-10 text-sm" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>Sin juegos para mostrar.</p>
-        )}
-        {shown.map((game) => {
-          const pred = predictions[game.id]
-          if (!pred) return null
-          return (
-            <GameCard
-              key={game.id}
-              game={game}
-              homeTeam={teams[game.homeId]}
-              awayTeam={teams[game.awayId]}
-              prediction={pred}
-              personalPick={personalPicks[game.id]}
-              onClick={() => setSelectedGameId(game.id)}
-            />
-          )
-        })}
-      </div>
-    </div>
+      )}
+    </section>
   )
 }

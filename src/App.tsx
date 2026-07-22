@@ -9,16 +9,60 @@ import Settings from './pages/Settings'
 
 type Tab = 'calendario' | 'posiciones' | 'postemporada' | 'parlay' | 'aciertos' | 'ajustes'
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'calendario',   label: 'Calendario'   },
-  { id: 'posiciones',   label: 'Posiciones'   },
-  { id: 'postemporada', label: 'Postemporada' },
-  { id: 'parlay',       label: 'Parlay'       },
-  { id: 'aciertos',     label: 'Aciertos'     },
-  { id: 'ajustes',      label: 'Ajustes'      },
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: 'calendario',   label: 'Calendario',   icon: '▦' },
+  { id: 'posiciones',   label: 'Posiciones',   icon: '≣' },
+  { id: 'postemporada', label: 'Postemporada', icon: '⑃' },
+  { id: 'parlay',       label: 'Parlay',       icon: '⧉' },
+  { id: 'aciertos',     label: 'Aciertos',     icon: '◎' },
+  { id: 'ajustes',      label: 'Ajustes',      icon: '⚙' },
 ]
 
 type SyncState = 'idle' | 'loading' | 'ok' | 'error'
+
+function PennantLogo({ size = 40 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" style={{ flexShrink: 0, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,.5))' }}>
+      <defs>
+        <linearGradient id="pnTile" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#15385f" />
+          <stop offset="1" stopColor="#0C2340" />
+        </linearGradient>
+      </defs>
+      <rect width="40" height="40" rx="11" fill="url(#pnTile)" />
+      <rect width="40" height="40" rx="11" fill="none" stroke="rgba(255,255,255,.12)" />
+      <rect x="12.4" y="8.5" width="2.6" height="23" rx="1.3" fill="#EAF1FA" />
+      <circle cx="13.7" cy="8.4" r="1.9" fill="#EAF1FA" />
+      <path d="M15 10 L31.5 15.4 L15 20.8 Z" fill="#C8102E" />
+      <path d="M17.6 12.9 Q23 14.3 28.4 15.1" stroke="#fff" strokeWidth="1.1" fill="none" strokeDasharray="1.5 1.6" strokeLinecap="round" opacity=".9" />
+    </svg>
+  )
+}
+
+function SyncButton({ state, msg, onClick }: { state: SyncState; msg: string; onClick: () => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+      <button
+        onClick={onClick}
+        disabled={state === 'loading'}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '6px 11px', borderRadius: 8, fontSize: 11, fontWeight: 700, fontFamily: 'var(--fu)',
+          backgroundColor: state === 'error' ? 'rgba(232,66,89,.2)' : state === 'ok' ? 'rgba(52,199,123,.2)' : 'rgba(255,255,255,.08)',
+          border: `1px solid ${state === 'error' ? 'rgba(232,66,89,.4)' : state === 'ok' ? 'rgba(52,199,123,.4)' : 'var(--border)'}`,
+          color: state === 'error' ? 'var(--red-b)' : state === 'ok' ? 'var(--green)' : 'var(--text)',
+          cursor: state === 'loading' ? 'wait' : 'pointer', transition: 'all .2s',
+        }}
+      >
+        <span style={{ display: 'inline-block', animation: state === 'loading' ? 'spin 1s linear infinite' : 'none' }}>
+          {state === 'loading' ? '⟳' : state === 'ok' ? '✓' : state === 'error' ? '⚠' : '⟳'}
+        </span>
+        {state === 'loading' ? 'Sincronizando…' : 'MLB Live'}
+      </button>
+      {msg && <span style={{ fontSize: 9, fontFamily: 'var(--fm)', color: state === 'error' ? 'var(--red-b)' : 'var(--green)', opacity: 0.85 }}>{msg}</span>}
+    </div>
+  )
+}
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('calendario')
@@ -54,68 +98,49 @@ export default function App() {
     return () => clearInterval(interval)
   }, [handleSync])
 
-  return (
-    <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg-base)' }}>
-      {/* Header */}
-      <header style={{ backgroundColor: 'var(--color-primary)', borderBottom: '3px solid var(--color-accent)' }}>
-        <div className="max-w-5xl mx-auto px-3 py-2 flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <h1 className="font-black text-2xl sm:text-3xl uppercase tracking-wide leading-none truncate" style={{ color: 'white', fontFamily: 'var(--font-display)' }}>
-              MLB 2026
-            </h1>
-            <p className="text-xs mt-0.5 hidden sm:block" style={{ color: 'white', opacity: 0.65 }}>
-              Análisis Estadístico · Uso privado
-            </p>
-          </div>
+  const navButtons = TABS.map(({ id, label, icon }) => (
+    <button key={id} onClick={() => setTab(id)} className={`pn-navbtn${tab === id ? ' is-active' : ''}`}>
+      <span className="pn-navico">{icon}</span>
+      <span className="pn-navlbl">{label}</span>
+    </button>
+  ))
 
-          <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-            <button
-              onClick={() => handleSync()}
-              disabled={syncState === 'loading'}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '5px 10px', borderRadius: 7, fontSize: 11, fontWeight: 700,
-                backgroundColor: syncState === 'error' ? 'rgba(239,68,68,0.25)' : syncState === 'ok' ? 'rgba(46,139,87,0.25)' : 'rgba(255,255,255,0.12)',
-                border: `1px solid ${syncState === 'error' ? 'rgba(239,68,68,0.4)' : syncState === 'ok' ? 'rgba(46,139,87,0.4)' : 'rgba(255,255,255,0.2)'}`,
-                color: syncState === 'error' ? '#f87171' : syncState === 'ok' ? '#4ade80' : 'white',
-                cursor: syncState === 'loading' ? 'wait' : 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              <span style={{ display: 'inline-block', animation: syncState === 'loading' ? 'spin 1s linear infinite' : 'none' }}>
-                {syncState === 'loading' ? '⟳' : syncState === 'ok' ? '✓' : syncState === 'error' ? '⚠' : '⟳'}
-              </span>
-              <span className="hidden sm:inline">{syncState === 'loading' ? 'Sincronizando…' : 'MLB Live'}</span>
-            </button>
-            {syncMsg && <span style={{ fontSize: 9, color: syncState === 'error' ? '#f87171' : '#4ade80', opacity: 0.85 }}>{syncMsg}</span>}
+  return (
+    <div className="pn-shell">
+      {/* Barra superior (sólo móvil) */}
+      <div className="pn-topbar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <PennantLogo size={30} />
+          <div style={{ fontFamily: 'var(--fd)', fontWeight: 700, fontSize: 15, letterSpacing: '.06em' }}>PENNANT</div>
+        </div>
+        <SyncButton state={syncState} msg={syncMsg} onClick={() => handleSync()} />
+      </div>
+
+      {/* Sidebar / barra inferior */}
+      <nav className="pn-nav">
+        <div className="pn-brand">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+            <PennantLogo size={40} />
+            <div>
+              <div style={{ fontFamily: 'var(--fd)', fontWeight: 700, fontSize: 16, lineHeight: 1, letterSpacing: '.06em' }}>PENNANT</div>
+              <div style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 4, fontFamily: 'var(--fm)' }}>MLB Analytics · 2026</div>
+            </div>
           </div>
         </div>
-      </header>
 
-      {/* Nav */}
-      <nav style={{ backgroundColor: 'var(--color-bg-card)', borderBottom: '1px solid rgba(12,35,64,0.5)' }}>
-        <div className="max-w-5xl mx-auto px-2 py-1" style={{ overflowX: 'auto', display: 'flex', gap: 2, scrollbarWidth: 'none' }}>
-          {TABS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className="text-xs sm:text-sm rounded-md transition-colors"
-              style={{
-                padding: '6px 10px', whiteSpace: 'nowrap', flexShrink: 0,
-                backgroundColor: tab === id ? 'var(--color-primary)' : 'transparent',
-                color: tab === id ? 'white' : 'var(--color-gray-light)',
-                opacity: tab === id ? 1 : 0.65,
-                fontWeight: 600,
-              }}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="pn-navlist">{navButtons}</div>
+
+        <div className="pn-navfoot">
+          <SyncButton state={syncState} msg={syncMsg} onClick={() => handleSync()} />
+          <div style={{ fontSize: 11, color: 'var(--green)', fontFamily: 'var(--fm)', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 8px var(--green)' }} />
+            modelo activo
+          </div>
         </div>
       </nav>
 
-      {/* Main */}
-      <main className="max-w-5xl mx-auto px-4 py-6">
+      {/* Contenido */}
+      <main className="pn-main">
         {tab === 'calendario'   && <Schedule />}
         {tab === 'posiciones'   && <Standings />}
         {tab === 'postemporada' && <Postseason />}

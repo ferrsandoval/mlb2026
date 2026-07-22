@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useStore } from '../store/useStore'
-import TeamBadge from '../components/TeamBadge'
+import PageHeader from '../components/PageHeader'
 import type { Team } from '../data/seed'
 import type { GamePrediction } from '../types'
 
@@ -17,49 +17,38 @@ interface ParlayPick {
   date: string
 }
 
-interface GameWithPred {
-  label: string
-  homeTeam: Team
-  awayTeam: Team
-  pred: GamePrediction
-  date: string
+interface GameWithPred { label: string; homeTeam: Team; awayTeam: Team; pred: GamePrediction; date: string }
+
+const fairOdds = (prob: number): number => (prob > 0 ? 1 / prob : 999)
+
+/** Cuota decimal justa → americana. */
+function american(dec: number): string {
+  if (dec <= 1) return '—'
+  return dec >= 2 ? '+' + Math.round((dec - 1) * 100) : '-' + Math.round(100 / (dec - 1))
 }
 
-function fairOdds(prob: number): number {
-  return prob > 0 ? 1 / prob : 999
-}
-
-function pct(n: number): string {
-  return (n * 100).toFixed(1) + '%'
+const typeLabels: Record<BetType, string> = {
+  moneyline: 'Moneyline', over: 'Total', under: 'Total', run_line_home: 'Run line', run_line_away: 'Run line', exact: 'Marcador exacto',
 }
 
 function generateParlays(games: GameWithPred[]): { safe: ParlayPick[]; moderate: ParlayPick[]; risky: ParlayPick[] } {
   const allPicks: ParlayPick[] = []
-
   for (const g of games) {
     const base = { gameLabel: g.label, homeTeam: g.homeTeam, awayTeam: g.awayTeam, date: g.date }
     const p = g.pred
-
-    if (p.probHome > p.probAway) {
-      allPicks.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.homeTeam.id}`, prob: p.probHome, fairOdds: fairOdds(p.probHome) })
-    } else {
-      allPicks.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.awayTeam.id}`, prob: p.probAway, fairOdds: fairOdds(p.probAway) })
-    }
-
-    allPicks.push({ ...base, betType: 'over',  betLabel: `Over ${p.runLine} carreras`,  prob: p.probOver,  fairOdds: fairOdds(p.probOver) })
+    if (p.probHome > p.probAway) allPicks.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.homeTeam.id}`, prob: p.probHome, fairOdds: fairOdds(p.probHome) })
+    else allPicks.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.awayTeam.id}`, prob: p.probAway, fairOdds: fairOdds(p.probAway) })
+    allPicks.push({ ...base, betType: 'over', betLabel: `Over ${p.runLine} carreras`, prob: p.probOver, fairOdds: fairOdds(p.probOver) })
     allPicks.push({ ...base, betType: 'under', betLabel: `Under ${p.runLine} carreras`, prob: p.probUnder, fairOdds: fairOdds(p.probUnder) })
-
     allPicks.push({ ...base, betType: 'run_line_home', betLabel: `${g.homeTeam.id} -1.5`, prob: p.probHomeMinus15, fairOdds: fairOdds(p.probHomeMinus15) })
     allPicks.push({ ...base, betType: 'run_line_away', betLabel: `${g.awayTeam.id} +1.5`, prob: p.probAwayPlus15, fairOdds: fairOdds(p.probAwayPlus15) })
-
     const top = p.topScorelines[0]
-    allPicks.push({ ...base, betType: 'exact', betLabel: `Exacto ${top.home}–${top.away}`, prob: top.prob, fairOdds: fairOdds(top.prob) })
+    allPicks.push({ ...base, betType: 'exact', betLabel: `Exacto ${top.away}–${top.home}`, prob: top.prob, fairOdds: fairOdds(top.prob) })
   }
 
   const safe: ParlayPick[] = []
   for (const g of games) {
-    const candidates = allPicks.filter((p) => p.gameLabel === g.label && p.betType === 'moneyline' && p.prob > 0.58)
-    candidates.sort((a, b) => b.prob - a.prob)
+    const candidates = allPicks.filter((p) => p.gameLabel === g.label && p.betType === 'moneyline' && p.prob > 0.58).sort((a, b) => b.prob - a.prob)
     if (candidates[0]) safe.push(candidates[0])
   }
 
@@ -82,69 +71,39 @@ function generateParlays(games: GameWithPred[]): { safe: ParlayPick[]; moderate:
   return { safe, moderate, risky }
 }
 
-function PickRow({ pick, index }: { pick: ParlayPick; index: number }) {
-  const typeColors: Record<BetType, string> = {
-    moneyline: 'var(--color-primary)',
-    over: 'var(--color-positive)',
-    under: '#E8A317',
-    run_line_home: '#6366f1',
-    run_line_away: '#8b5cf6',
-    exact: 'var(--color-accent)',
-  }
-  const typeLabels: Record<BetType, string> = {
-    moneyline: 'Moneyline', over: 'Total', under: 'Total', run_line_home: 'Run Line', run_line_away: 'Run Line', exact: 'Marcador',
-  }
-
-  return (
-    <div className="rounded-xl p-4" style={{ backgroundColor: 'var(--color-bg-card)' }}>
-      <div className="flex items-start gap-3">
-        <div className="font-black text-xl w-8 h-8 flex items-center justify-center rounded-lg flex-shrink-0" style={{ backgroundColor: typeColors[pick.betType], color: 'white' }}>
-          {index + 1}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <TeamBadge team={pick.homeTeam} size="sm" />
-            <span className="text-xs font-bold" style={{ color: 'var(--color-gray-light)', opacity: 0.7 }}>{pick.awayTeam.id} @ {pick.homeTeam.id}</span>
-            <TeamBadge team={pick.awayTeam} size="sm" />
-          </div>
-          <p className="font-black text-lg uppercase" style={{ color: 'var(--color-gray-light)' }}>{pick.betLabel}</p>
-          <div className="flex items-center gap-3 mt-1">
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: typeColors[pick.betType], color: 'white', opacity: 0.9 }}>{typeLabels[pick.betType]}</span>
-            <span className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>{pick.date}</span>
-          </div>
-        </div>
-        <div className="text-right flex-shrink-0">
-          <p className="font-black text-2xl" style={{ color: pick.prob >= 0.55 ? 'var(--color-positive)' : pick.prob >= 0.40 ? 'var(--color-gray-light)' : 'var(--color-accent)' }}>{pct(pick.prob)}</p>
-          <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>Cuota justa {pick.fairOdds.toFixed(2)}</p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ParlayCard({ title, subtitle, picks, color }: { title: string; subtitle: string; picks: ParlayPick[]; color: string }) {
+function ParlayColumn({ tier, accent, picks }: { tier: string; accent: string; picks: ParlayPick[] }) {
   if (picks.length === 0) return null
   const combinedProb = picks.reduce((acc, p) => acc * p.prob, 1)
-  const combinedOdds = fairOdds(combinedProb)
-
+  const combinedOdds = american(fairOdds(combinedProb))
   return (
-    <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${color}33` }}>
-      <div className="px-5 py-3 flex items-center justify-between" style={{ backgroundColor: `${color}18` }}>
+    <div style={{ background: 'linear-gradient(180deg,var(--surface-2),var(--surface))', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--sh)' }}>
+      <div style={{ padding: '15px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: `3px solid ${accent}` }}>
         <div>
-          <h3 className="font-black text-xl uppercase" style={{ color }}>{title}</h3>
-          <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>{subtitle}</p>
+          <div style={{ fontFamily: 'var(--fd)', fontWeight: 700, fontSize: 16, color: accent }}>{tier}</div>
+          <div style={{ fontFamily: 'var(--fm)', fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>{picks.length} selecciones</div>
         </div>
-        <div className="text-right">
-          <p className="font-black text-3xl" style={{ color }}>{combinedOdds.toFixed(2)}x</p>
-          <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>Prob. {pct(combinedProb)}</p>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontFamily: 'var(--fm)', fontWeight: 700, fontSize: 20 }}>{combinedOdds}</div>
+          <div style={{ fontFamily: 'var(--fm)', fontSize: 11, color: 'var(--muted)' }}>prob {(combinedProb * 100).toFixed(1)}%</div>
         </div>
       </div>
-      <div className="p-3 space-y-2">
-        {picks.map((pick, i) => <PickRow key={i} pick={pick} index={i} />)}
-      </div>
-      <div className="px-5 py-3 flex items-center justify-between text-xs" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', color: 'var(--color-gray-light)', opacity: 0.5 }}>
-        <span>{picks.length} selecciones</span>
-        <span>Apuesta $100 → Pago potencial ${(100 * combinedOdds).toFixed(0)}</span>
+      <div style={{ padding: '6px 8px' }}>
+        {picks.map((lg, i) => (
+          <div key={i}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 10px', borderRadius: 9 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: 'var(--fd)', fontWeight: 600, fontSize: 13.5 }}>{lg.betLabel}</div>
+                <div style={{ fontFamily: 'var(--fm)', fontSize: 10.5, color: 'var(--faint)', marginTop: 2 }}>{lg.awayTeam.id} @ {lg.homeTeam.id} · {typeLabels[lg.betType]}</div>
+              </div>
+              <span style={{ fontFamily: 'var(--fm)', fontSize: 13, fontWeight: 700, color: 'var(--muted)', flexShrink: 0 }}>{american(lg.fairOdds)}</span>
+            </div>
+            {i < picks.length - 1 && <div style={{ height: 1, background: 'var(--border)', margin: '0 10px' }} />}
+          </div>
+        ))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 10px 8px' }}>
+          <span style={{ fontFamily: 'var(--fm)', fontSize: 11, color: 'var(--faint)' }}>Cuota justa combinada</span>
+          <span style={{ fontFamily: 'var(--fm)', fontWeight: 700, fontSize: 15, color: accent }}>{combinedOdds}</span>
+        </div>
       </div>
     </div>
   )
@@ -159,7 +118,6 @@ export default function Parlay() {
     const today = new Date().toISOString().slice(0, 10)
     const upcomingDates = [...new Set(games.filter((g) => !g.played).map((g) => g.date))].sort()
     const targetDate = upcomingDates.find((d) => d >= today) ?? upcomingDates[0]
-
     const result: GameWithPred[] = []
     if (targetDate) {
       for (const g of games.filter((x) => x.date === targetDate && !x.played)) {
@@ -177,45 +135,33 @@ export default function Parlay() {
 
   if (todayGames.length === 0) {
     return (
-      <div className="rounded-xl p-8 text-center" style={{ backgroundColor: 'var(--color-bg-card)' }}>
-        <p className="font-black text-2xl uppercase mb-2" style={{ color: 'var(--color-gray-light)' }}>Sin juegos próximos</p>
-        <p className="text-sm" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>No hay juegos programados próximamente.</p>
-      </div>
+      <section style={{ animation: 'fadein .3s ease' }}>
+        <PageHeader eyebrow="Parlay · Combinadas" title="Combinadas del día" />
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '40px 20px', textAlign: 'center' }}>
+          <p style={{ fontFamily: 'var(--fd)', fontWeight: 700, fontSize: 18 }}>Sin juegos próximos</p>
+          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>No hay juegos programados próximamente.</p>
+        </div>
+      </section>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="font-black text-3xl uppercase" style={{ color: 'var(--color-gray-light)' }}>Parlay del Día</h2>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>
-          {dateLabel} · {todayGames.length} juego{todayGames.length > 1 ? 's' : ''} · Generado con modelo Elo+Poisson
-        </p>
+    <section style={{ animation: 'fadein .3s ease' }}>
+      <PageHeader
+        eyebrow="Parlay · Combinadas"
+        title="Combinadas del día"
+        subtitle={`${dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1)} · ${todayGames.length} juego${todayGames.length > 1 ? 's' : ''} · modelo Elo+Poisson`}
+      />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 14, alignItems: 'start' }}>
+        <ParlayColumn tier="Segura" accent="var(--green)" picks={parlays.safe} />
+        <ParlayColumn tier="Moderada" accent="var(--amber)" picks={parlays.moderate} />
+        <ParlayColumn tier="Riesgosa" accent="var(--red-b)" picks={parlays.risky} />
       </div>
 
-      <div className="rounded-xl p-4" style={{ backgroundColor: 'var(--color-bg-card)' }}>
-        <h3 className="font-bold text-sm uppercase mb-3" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>Juegos del día</h3>
-        <div className="space-y-2">
-          {todayGames.map((g, i) => (
-            <div key={i} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: 'var(--color-bg-base)' }}>
-              <div className="flex items-center gap-2">
-                <TeamBadge team={g.awayTeam} size="sm" />
-                <span className="text-sm font-bold" style={{ color: 'var(--color-gray-light)' }}>{g.awayTeam.id} @ {g.homeTeam.id}</span>
-                <TeamBadge team={g.homeTeam} size="sm" />
-              </div>
-              <span className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>{pct(g.pred.probAway)} – {pct(g.pred.probHome)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <ParlayCard title="Parlay Seguro" subtitle="Favoritos claros de moneyline — baja cuota, alta probabilidad" picks={parlays.safe} color="#22c55e" />
-      <ParlayCard title="Parlay Moderado" subtitle="Mix de ganador + total + línea de carreras — equilibrio riesgo/pago" picks={parlays.moderate} color="#3b82f6" />
-      <ParlayCard title="Parlay Riesgoso" subtitle="Favoritos + marcador exacto — paga bien si todo sale" picks={parlays.risky} color="var(--color-accent)" />
-
-      <div className="text-xs text-center py-2" style={{ color: 'var(--color-gray-light)', opacity: 0.3 }}>
-        Las cuotas son probabilidades justas del modelo (sin margen de la casa). Esto es un ejercicio estadístico, no asesoría financiera.
-      </div>
-    </div>
+      <p style={{ textAlign: 'center', padding: '18px 0 0', fontFamily: 'var(--fm)', fontSize: 11, color: 'var(--faint)' }}>
+        Cuotas justas del modelo (sin margen de la casa). Ejercicio estadístico, no asesoría financiera.
+      </p>
+    </section>
   )
 }
