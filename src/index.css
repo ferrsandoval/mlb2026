@@ -70,6 +70,7 @@
 
 body {
   margin: 0;
+  overflow-x: hidden; /* ningún elemento debe provocar scroll horizontal en móvil */
   background:
     radial-gradient(1200px 700px at 80% -10%, rgba(76, 154, 255, .06), transparent 60%),
     radial-gradient(900px 600px at -10% 10%, rgba(200, 16, 46, .06), transparent 55%),
@@ -163,6 +164,7 @@ a:hover { color: #7fbaff; }
 
   .pn-nav {
     position: fixed;
+    top: auto; /* anula el top:0 de escritorio: si no, top+bottom estiran el nav a toda la pantalla y su blur tapa el contenido */
     bottom: 0; left: 0; right: 0;
     width: auto;
     height: auto;

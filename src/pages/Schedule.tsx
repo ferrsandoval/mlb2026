@@ -155,7 +155,7 @@ export default function Schedule() {
       {shown.length === 0 ? (
         <p style={{ textAlign: 'center', padding: '40px 0', fontSize: 13, color: 'var(--faint)' }}>Sin juegos para mostrar.</p>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(340px,1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(100%,340px),1fr))', gap: 12 }}>
           {shown.map((game) => {
             const pred = predictions[game.id]
             if (!pred) return null

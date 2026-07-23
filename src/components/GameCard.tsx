@@ -132,8 +132,8 @@ const GameCard = memo(function GameCard({ game, homeTeam, awayTeam, prediction, 
         <ProbBar probHome={prediction.probHome} probAway={prediction.probAway} homeColor={homeTeam.primaryColor} awayColor={awayTeam.primaryColor} />
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-        <div style={{ flex: 1, background: rs ? rs.bg : 'rgba(255,255,255,.03)', border: `1px solid ${rs ? rs.border : 'var(--border)'}`, borderRadius: 9, padding: '8px 10px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+        <div style={{ flex: '1 1 92px', minWidth: 0, background: rs ? rs.bg : 'rgba(255,255,255,.03)', border: `1px solid ${rs ? rs.border : 'var(--border)'}`, borderRadius: 9, padding: '8px 10px' }}>
           <div style={{ fontSize: 10, color: rs ? rs.color : 'var(--faint)', fontFamily: 'var(--fm)', letterSpacing: '.05em', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
             <span>PRONÓSTICO</span>{rs && <span style={{ fontWeight: 700 }}>{rs.label}</span>}
           </div>
@@ -141,7 +141,7 @@ const GameCard = memo(function GameCard({ game, homeTeam, awayTeam, prediction, 
             {modelPickId} <span style={{ color: 'var(--faint)', fontWeight: 400, fontSize: 12 }}>{pct(modelPickProb)}%</span>
           </div>
         </div>
-        <div style={{ flex: 1, background: rsTotal ? rsTotal.bg : 'rgba(245,184,65,.06)', border: `1px solid ${rsTotal ? rsTotal.border : 'rgba(245,184,65,.22)'}`, borderRadius: 9, padding: '8px 10px' }}>
+        <div style={{ flex: '1 1 92px', minWidth: 0, background: rsTotal ? rsTotal.bg : 'rgba(245,184,65,.06)', border: `1px solid ${rsTotal ? rsTotal.border : 'rgba(245,184,65,.22)'}`, borderRadius: 9, padding: '8px 10px' }}>
           <div style={{ fontSize: 10, fontFamily: 'var(--fm)', letterSpacing: '.05em', color: rsTotal ? rsTotal.color : 'var(--amber)', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
             <span>TOTAL</span>{rsTotal && <span style={{ fontWeight: 700 }}>{rsTotal.label}</span>}
           </div>
@@ -149,7 +149,7 @@ const GameCard = memo(function GameCard({ game, homeTeam, awayTeam, prediction, 
             {totalLabel} {prediction.runLine} <span style={{ color: 'var(--faint)', fontWeight: 400, fontSize: 12 }}>{pct(totalProb)}%</span>
           </div>
         </div>
-        <div style={{ flex: 1, background: 'rgba(76,154,255,.06)', border: '1px solid rgba(76,154,255,.22)', borderRadius: 9, padding: '8px 10px' }}>
+        <div style={{ flex: '1 1 92px', minWidth: 0, background: 'rgba(76,154,255,.06)', border: '1px solid rgba(76,154,255,.22)', borderRadius: 9, padding: '8px 10px' }}>
           <div style={{ fontSize: 10, fontFamily: 'var(--fm)', letterSpacing: '.05em', color: 'var(--blue)' }}>CUOTA JUSTA</div>
           <div style={{ fontFamily: 'var(--fm)', fontWeight: 700, fontSize: 15, marginTop: 2 }}>{fairCode} {fair.txt}</div>
         </div>
