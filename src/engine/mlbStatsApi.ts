@@ -11,11 +11,12 @@
 // =============================================================================
 
 import type { Game, Team } from '../data/seed'
-import { buildPitcherRating, parseInningsPitched } from './pitchers'
+import { buildPitcherRating, parseInningsPitched, computeFIP, regressedFIP } from './pitchers'
 import type { PitcherRating } from './pitchers'
 
 const STATS_API = 'https://statsapi.mlb.com/api/v1/schedule'
 const PEOPLE_API = 'https://statsapi.mlb.com/api/v1/people'
+const TEAM_STATS_API = 'https://statsapi.mlb.com/api/v1/teams/stats'
 
 interface RawPitcher {
   id: number
@@ -184,4 +185,55 @@ export interface ScoreSyncResult {
   updated: number
   unmatched: string[]
   errors: string[]
+}
+
+// ─── Factores de bullpen por equipo (relevistas) ──────────────────────────────
+
+interface RawTeamStats {
+  stats?: Array<{
+    splits?: Array<{ team?: { id: number; name: string }; stat: Record<string, unknown> }>
+  }>
+}
+
+/**
+ * Factor de bullpen por equipo = FIP de sus relevistas ÷ FIP medio de los
+ * bullpens de la liga (ponderado por innings). Se normaliza a la media de la
+ * LIGA (no a la media general) para no sesgar: como los relevistas rinden mejor
+ * que los abridores, compararlos contra el promedio global haría ver a todos los
+ * bullpens como suprimidores. 1 = bullpen promedio, <1 = mejor que la media.
+ * Devuelve un mapa teamId(seed) → factor.
+ */
+export async function fetchBullpenFactors(
+  season: number,
+  nameToId: Record<string, string>,
+): Promise<Record<string, number>> {
+  const url = `${TEAM_STATS_API}?season=${season}&stats=statSplits&sitCodes=rp&group=pitching&sportId=1`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`MLB Stats API team-stats ${res.status}`)
+  const raw = (await res.json()) as RawTeamStats
+
+  const rows: { teamId: string; fip: number; ip: number }[] = []
+  for (const sp of raw.stats?.[0]?.splits ?? []) {
+    const teamId = sp.team ? nameToId[sp.team.name] : undefined
+    if (!teamId) continue
+    const ip = parseInningsPitched((sp.stat.inningsPitched as string | number) ?? 0)
+    if (ip <= 0) continue
+    const rawFip = computeFIP({
+      ip,
+      hr: num(sp.stat.homeRuns),
+      bb: num(sp.stat.baseOnBalls),
+      so: num(sp.stat.strikeOuts),
+    })
+    rows.push({ teamId, fip: regressedFIP(rawFip, ip), ip })
+  }
+  if (rows.length === 0) return {}
+
+  const totalIp = rows.reduce((s, r) => s + r.ip, 0)
+  const leagueFip = rows.reduce((s, r) => s + r.fip * r.ip, 0) / totalIp
+
+  const factors: Record<string, number> = {}
+  for (const r of rows) {
+    factors[r.teamId] = Math.min(1.25, Math.max(0.75, r.fip / leagueFip))
+  }
+  return factors
 }

@@ -1,40 +1,30 @@
 // =============================================================================
-// logos.ts — URLs de logos por equipo (indexadas por id de la semilla).
+// logos.ts — Logos oficiales de MLB por equipo (indexados por id de la semilla).
 // -----------------------------------------------------------------------------
-// Provienen del diseño de Claude Design. Se mapean a los ids reales de seed.ts
-// (que difieren en algunos códigos: TB, KC, WSH, SD, SF). El TeamBadge cae al
-// código del equipo si el logo no carga o no existe.
+// Fuente: CDN oficial de MLB (www.mlbstatic.com/team-logos/{mlbamId}.svg). Son
+// SVG con encuadre uniforme, cuadrado y centrado — a diferencia de las imágenes
+// sueltas anteriores (imgur/freebiesupply), que venían con recortes y márgenes
+// dispares y salían descentradas o apretadas en el badge.
+//
+// La clave es el id de la semilla (seed.ts); el valor usa el id numérico de la
+// MLB Stats API (MLBAM). TeamBadge cae al código del equipo si el SVG no carga.
 // =============================================================================
 
-export const LOGOS: Record<string, string> = {
-  NYY: 'https://cdn.freebiesupply.com/images/large/2x/new-york-yankees-logo-transparent.png',
-  BOS: 'https://i.imgur.com/BXa5XOX.png',
-  TB:  'https://cdn.freebiesupply.com/images/large/2x/tampa-bay-rays-logo-transparent.png',
-  TOR: 'https://cdn.freebiesupply.com/images/large/2x/toronto-blue-jays-logo-transparent.png',
-  BAL: 'https://i.imgur.com/QtmNAXU.png',
-  CLE: 'https://i.imgur.com/SognLe8.png',
-  MIN: 'https://cdn.freebiesupply.com/images/large/2x/minnesota-twins-logo-transparent.png',
-  DET: 'https://i.imgur.com/XZw5k5b.png',
-  KC:  'https://i.imgur.com/rflWcc5.png',
-  CWS: 'https://i.imgur.com/fmIjMpD.png',
-  HOU: 'https://i.imgur.com/eRHQfIO.png',
-  SEA: 'https://i.imgur.com/IN4J0jV.png',
-  TEX: 'https://upload.wikimedia.org/wikipedia/it/archive/d/d3/20160905123800%21Texas_Rangers_logo.png',
-  LAA: 'https://i.imgur.com/ATDoGbD.png',
-  ATH: 'https://cdn.freebiesupply.com/images/large/2x/oakland-athletics-logo-transparent.png',
-  ATL: 'https://i.imgur.com/YzNRxqN.png',
-  PHI: 'https://i.imgur.com/UhKIUXO.png',
-  NYM: 'https://i.imgur.com/hl0PZR6.png',
-  MIA: 'https://i.imgur.com/37QjW98.png',
-  WSH: 'https://cdn.freebiesupply.com/images/large/2x/washington-nationals-logo-transparent.png',
-  MIL: 'https://i.imgur.com/oCi3i1d.png',
-  CHC: 'https://i.imgur.com/nWkHWZ0.png',
-  STL: 'https://i.imgur.com/aEOfFWH.png',
-  CIN: 'https://i.imgur.com/aQ3V3en.png',
-  PIT: 'https://i.imgur.com/aENmzQK.png',
-  LAD: 'https://i.imgur.com/xQrICHD.png',
-  SD:  'https://i.imgur.com/bhkO5Dg.png',
-  SF:  'https://cdn.freebiesupply.com/images/large/2x/san-francisco-giants-logo-transparent.png',
-  ARI: 'https://i.imgur.com/JTlIjKS.png',
-  COL: 'https://i.imgur.com/mCnIgD1.png',
+const MLBAM_ID: Record<string, number> = {
+  // AL East
+  NYY: 147, BOS: 111, TOR: 141, BAL: 110, TB: 139,
+  // AL Central
+  CLE: 114, MIN: 142, DET: 116, CWS: 145, KC: 118,
+  // AL West
+  HOU: 117, SEA: 136, TEX: 140, LAA: 108, ATH: 133,
+  // NL East
+  ATL: 144, NYM: 121, PHI: 143, MIA: 146, WSH: 120,
+  // NL Central
+  MIL: 158, CHC: 112, CIN: 113, PIT: 134, STL: 138,
+  // NL West
+  LAD: 119, SD: 135, SF: 137, ARI: 109, COL: 115,
 }
+
+export const LOGOS: Record<string, string> = Object.fromEntries(
+  Object.entries(MLBAM_ID).map(([id, mlbam]) => [id, `https://www.mlbstatic.com/team-logos/${mlbam}.svg`]),
+)

@@ -19,6 +19,7 @@
 
 import type { Game } from '../data/seed'
 import type { MatchupContext } from './poisson'
+import { parkFactor } from './parkFactors'
 
 export interface PitcherStats {
   id: number
@@ -33,9 +34,10 @@ export interface PitcherStats {
 export interface PitcherRating {
   id: string
   name: string
-  fip: number   // FIP regresado a la media de liga
+  fip: number      // FIP regresado a la media de liga
   ip: number
-  factor: number // multiplicador de carreras del rival [0.75, 1.25]; <1 = suprime
+  fipRatio: number // FIP regresado / FIP de liga (1 = promedio; componente puro del abridor)
+  factor: number   // factor de supresión asumiendo bullpen promedio (para mostrar) [0.75, 1.25]
 }
 
 export const LEAGUE_FIP = 4.15          // FIP/ERA promedio de liga (escala de carreras/9)
@@ -86,24 +88,49 @@ export function buildPitcherRating(s: PitcherStats): PitcherRating {
     name: s.name,
     fip: regressedFIP(rawFip, s.ip),
     ip: s.ip,
+    fipRatio: regressedFIP(rawFip, s.ip) / LEAGUE_FIP,
     factor: pitcherFactor(rawFip, s.ip),
   }
 }
 
 /**
- * Construye el contexto de abridores por juego para alimentar predictAll.
- * Un juego solo aparece si al menos uno de sus abridores tiene rating.
+ * Supresión de carreras de un lado combinando abridor (~60% del juego) y bullpen
+ * (~40%). `starterRatio` y `bullpenFactor` son "carreras permitidas relativas a la
+ * liga" (1 = promedio, <1 = suprime). Si no se conoce el abridor, se usa 1
+ * (neutral) para su porción, dejando que el bullpen ajuste el resto.
  */
-export function buildPitcherContext(
+export function combineSuppression(starterRatio: number | undefined, bullpenFactor = 1): number {
+  const starter = starterRatio ?? 1
+  const f = STARTER_GAME_SHARE * starter + (1 - STARTER_GAME_SHARE) * bullpenFactor
+  return Math.min(FACTOR_MAX, Math.max(FACTOR_MIN, f))
+}
+
+/**
+ * Construye el contexto de enfrentamiento por juego: supresión de cada lado
+ * (abridor + bullpen) y factor de parque. `bullpens` mapea teamId → factor
+ * relativo a la liga (1 = promedio). Solo omite un juego si no hay ningún dato
+ * que aporte (sin abridores, sin bullpen y parque neutral).
+ */
+export function buildMatchupContext(
   games: Game[],
   ratings: Record<string, PitcherRating>,
+  bullpens: Record<string, number> = {},
 ): Record<string, MatchupContext> {
   const ctx: Record<string, MatchupContext> = {}
   for (const g of games) {
-    const hp = g.homePitcherId ? ratings[g.homePitcherId] : undefined
-    const ap = g.awayPitcherId ? ratings[g.awayPitcherId] : undefined
-    if (hp || ap) {
-      ctx[g.id] = { homePitcherFactor: hp?.factor, awayPitcherFactor: ap?.factor }
+    const homeStarter = g.homePitcherId ? ratings[g.homePitcherId]?.fipRatio : undefined
+    const awayStarter = g.awayPitcherId ? ratings[g.awayPitcherId]?.fipRatio : undefined
+    const homeBull = bullpens[g.homeId]
+    const awayBull = bullpens[g.awayId]
+    const park = parkFactor(g.homeId)
+
+    const hasPitching = homeStarter !== undefined || awayStarter !== undefined || homeBull !== undefined || awayBull !== undefined
+    if (!hasPitching && park === 1) continue
+
+    ctx[g.id] = {
+      homePitcherFactor: combineSuppression(homeStarter, homeBull ?? 1), // pitcheo local → frena visitante
+      awayPitcherFactor: combineSuppression(awayStarter, awayBull ?? 1), // pitcheo visitante → frena local
+      parkFactor: park,
     }
   }
   return ctx

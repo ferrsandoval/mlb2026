@@ -2,12 +2,11 @@ import { useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import TeamBadge from '../components/TeamBadge'
 import PageHeader from '../components/PageHeader'
-import { parsePicksCsv, exportPicksCsv } from '../engine/personalPicks'
 
 export default function Settings() {
   const {
     teams, games, setTeamElo, setTeamAttack, setTeamDefense, registerResult,
-    exportJSON, importJSON, resetToSeed, loadPersonalPicks, personalPicks,
+    exportJSON, importJSON, resetToSeed,
     pitchers, syncPitchers, calibrateFromHistory,
   } = useStore()
 
@@ -21,7 +20,6 @@ export default function Settings() {
   const [calibBusy, setCalibBusy] = useState(false)
 
   const fileRef = useRef<HTMLInputElement>(null)
-  const picksCsvRef = useRef<HTMLInputElement>(null)
 
   const pendingGames = games.filter((g) => !g.played).slice(0, 500)
 
@@ -56,34 +54,6 @@ export default function Settings() {
     reader.onload = (ev) => { importJSON(ev.target?.result as string); flash('✓ Importado correctamente', setMsg) }
     reader.readAsText(file)
     e.target.value = ''
-  }
-
-  const handlePicksCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const picks = parsePicksCsv(ev.target?.result as string)
-      const n = Object.keys(picks).length
-      if (n === 0) flash('⚠ No se encontraron predicciones válidas', setMsg)
-      else { loadPersonalPicks(picks); flash(`✓ ${n} predicción${n !== 1 ? 'es' : ''} importada${n !== 1 ? 's' : ''}`, setMsg) }
-    }
-    reader.readAsText(file)
-    e.target.value = ''
-  }
-
-  const handlePicksCsvExport = () => {
-    const n = Object.keys(personalPicks).length
-    if (n === 0) { flash('⚠ No hay predicciones para exportar', setMsg); return }
-    const csv = exportPicksCsv(personalPicks)
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `mis-predicciones-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-    flash(`✓ ${n} predicción${n !== 1 ? 'es' : ''} exportada${n !== 1 ? 's' : ''}`, setMsg)
   }
 
   const handleSyncPitchers = async () => {
@@ -230,27 +200,6 @@ export default function Settings() {
         <button onClick={handleExport} className="w-full font-bold text-sm px-5 py-3 rounded-lg" style={{ backgroundColor: 'var(--color-primary)', color: 'white' }}>↓ Exportar JSON</button>
         <button onClick={() => fileRef.current?.click()} className="w-full font-bold text-sm px-5 py-3 rounded-lg" style={{ backgroundColor: 'var(--color-positive)', color: 'white' }}>↑ Importar JSON</button>
         <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
-      </div>
-
-      {/* Predicciones personales CSV */}
-      <div className="rounded-xl p-6 space-y-4" style={{ backgroundColor: 'var(--color-bg-card)', borderLeft: '3px solid var(--color-accent)' }}>
-        <div>
-          <h3 className="font-black text-xl uppercase" style={{ color: 'var(--color-accent)' }}>Tus Predicciones</h3>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-gray-light)', opacity: 0.6 }}>
-            Carga un CSV con tus marcadores predichos. También puedes editar juego a juego desde el detalle.
-          </p>
-        </div>
-        <div className="rounded-lg p-3 text-xs font-mono" style={{ backgroundColor: 'var(--color-bg-base)', color: 'var(--color-gray-light)', opacity: 0.7 }}>
-          gameId,homeRuns,awayRuns<br />G1,5,3<br />G7,2,2<br />G12,4,6
-        </div>
-        <div className="flex gap-3">
-          <button onClick={handlePicksCsvExport} className="flex-1 font-bold text-sm px-5 py-3 rounded-lg" style={{ backgroundColor: 'var(--color-bg-base)', color: 'var(--color-gray-light)', border: '1px solid var(--color-accent)' }}>↓ Exportar</button>
-          <button onClick={() => picksCsvRef.current?.click()} className="flex-1 font-bold text-sm px-5 py-3 rounded-lg" style={{ backgroundColor: 'var(--color-accent)', color: 'white' }}>↑ Importar</button>
-        </div>
-        <input ref={picksCsvRef} type="file" accept=".csv,.txt" className="hidden" onChange={handlePicksCsvImport} />
-        <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>
-          {Object.keys(personalPicks).length} predicción{Object.keys(personalPicks).length !== 1 ? 'es' : ''} guardada{Object.keys(personalPicks).length !== 1 ? 's' : ''}
-        </p>
       </div>
 
       {/* Reset */}

@@ -8,7 +8,6 @@ import { TEAMS, SEASON_START, SEASON_END } from '../data/seed'
 import type { Team, Game, League } from '../data/seed'
 import { generateSyntheticSchedule } from '../data/scheduleGenerator'
 import type { OddsInput, GamePrediction } from '../types'
-import type { PersonalPick } from '../engine/personalPicks'
 import { predictAll, computeLambdas, buildScoreMatrix } from '../engine/poisson'
 import { updateElo } from '../engine/elo'
 import {
@@ -17,12 +16,12 @@ import {
 } from '../data/postseason'
 import type { Series, SeedEntry } from '../data/postseason'
 import { computeLeagueStandings, computeDivisionWinners, computeWildCardStandings } from '../engine/standings'
-import { fetchMlbSchedule, buildNameToId, buildGamesFromEvents, fetchPitcherRatings } from '../engine/mlbStatsApi'
-import { buildPitcherContext } from '../engine/pitchers'
+import { fetchMlbSchedule, buildNameToId, buildGamesFromEvents, fetchPitcherRatings, fetchBullpenFactors } from '../engine/mlbStatsApi'
+import { buildMatchupContext } from '../engine/pitchers'
 import type { PitcherRating } from '../engine/pitchers'
 import { loadHistoricalGames } from '../data/historicalLoader'
 import { estimateRatings, maherFactory, DEFAULT_MAHER_PARAMS } from '../engine/ratings'
-import { holdoutBacktest } from '../engine/backtest'
+import { gridSearchHoldout, cartesianGrid } from '../engine/backtest'
 
 // ─── Tipos del store ──────────────────────────────────────────────────────────
 
@@ -31,8 +30,8 @@ interface StoreState {
   games: Game[]
   odds: Record<string, OddsInput>
   predictions: Record<string, GamePrediction>
-  personalPicks: Record<string, PersonalPick>
   pitchers: Record<string, PitcherRating>
+  bullpens: Record<string, number>
   postseasonSeries: Series[]
   postseasonSeeds: Record<League, SeedEntry[]> | null
   valueThreshold: number
@@ -43,8 +42,6 @@ interface StoreState {
   setTeamAttack: (teamId: string, attack: number) => void
   setTeamDefense: (teamId: string, defense: number) => void
   setOdds: (gameId: string, odds: OddsInput) => void
-  setPersonalPick: (gameId: string, pick: PersonalPick | null) => void
-  loadPersonalPicks: (picks: Record<string, PersonalPick>) => void
   registerResult: (gameId: string, homeRuns: number, awayRuns: number) => void
   setValueThreshold: (v: number) => void
   setKellyFraction: (v: number) => void
@@ -78,13 +75,14 @@ function buildInitialGames(): Game[] {
   return generateSyntheticSchedule(TEAMS, SEASON_START, SEASON_END)
 }
 
-/** Predicciones con el contexto de abridores aplicado (factor FIP por juego). */
+/** Predicciones con el contexto completo por juego: abridor + bullpen + parque. */
 function predictWithCtx(
   games: Game[],
   teams: Record<string, Team>,
   pitchers: Record<string, PitcherRating>,
+  bullpens: Record<string, number> = {},
 ): Record<string, GamePrediction> {
-  return predictAll(games, teams, buildPitcherContext(games, pitchers))
+  return predictAll(games, teams, buildMatchupContext(games, pitchers, bullpens))
 }
 
 function currentWinsByTeam(teams: Record<string, Team>, games: Game[]): Record<string, number> {
@@ -157,8 +155,8 @@ export const useStore = create<StoreState>()(
       games: buildInitialGames(),
       odds: {},
       predictions: predictAll(buildInitialGames(), buildInitialTeams()),
-      personalPicks: {},
       pitchers: {},
+      bullpens: {},
       postseasonSeries: [],
       postseasonSeeds: null,
       valueThreshold: 0.03,
@@ -168,36 +166,25 @@ export const useStore = create<StoreState>()(
       setTeamElo: (teamId, elo) => {
         set((s) => {
           const teams = { ...s.teams, [teamId]: { ...s.teams[teamId], elo } }
-          return { teams, predictions: predictWithCtx(s.games, teams, s.pitchers) }
+          return { teams, predictions: predictWithCtx(s.games, teams, s.pitchers, s.bullpens) }
         })
       },
 
       setTeamAttack: (teamId, attack) => {
         set((s) => {
           const teams = { ...s.teams, [teamId]: { ...s.teams[teamId], attack } }
-          return { teams, predictions: predictWithCtx(s.games, teams, s.pitchers) }
+          return { teams, predictions: predictWithCtx(s.games, teams, s.pitchers, s.bullpens) }
         })
       },
 
       setTeamDefense: (teamId, defense) => {
         set((s) => {
           const teams = { ...s.teams, [teamId]: { ...s.teams[teamId], defense } }
-          return { teams, predictions: predictWithCtx(s.games, teams, s.pitchers) }
+          return { teams, predictions: predictWithCtx(s.games, teams, s.pitchers, s.bullpens) }
         })
       },
 
       setOdds: (gameId, odds) => set((s) => ({ odds: { ...s.odds, [gameId]: odds } })),
-
-      setPersonalPick: (gameId, pick) => {
-        set((s) => {
-          const next = { ...s.personalPicks }
-          if (pick === null) delete next[gameId]
-          else next[gameId] = pick
-          return { personalPicks: next }
-        })
-      },
-
-      loadPersonalPicks: (picks) => set((s) => ({ personalPicks: { ...s.personalPicks, ...picks } })),
 
       registerResult: (gameId, homeRuns, awayRuns) => {
         set((s) => {
@@ -215,7 +202,7 @@ export const useStore = create<StoreState>()(
           }
           const games = s.games.map((g) => (g.id === gameId ? { ...g, played: true, homeRuns, awayRuns } : g))
 
-          return { teams, games, predictions: predictWithCtx(games, teams, s.pitchers) }
+          return { teams, games, predictions: predictWithCtx(games, teams, s.pitchers, s.bullpens) }
         })
       },
 
@@ -223,8 +210,8 @@ export const useStore = create<StoreState>()(
       setKellyFraction: (v) => set({ kellyFraction: v }),
 
       recalcPredictions: () => {
-        const { games, teams, pitchers } = get()
-        set({ predictions: predictWithCtx(games, teams, pitchers) })
+        const { games, teams, pitchers, bullpens } = get()
+        set({ predictions: predictWithCtx(games, teams, pitchers, bullpens) })
       },
 
       // ── Postemporada ────────────────────────────────────────────────────────
@@ -319,9 +306,11 @@ export const useStore = create<StoreState>()(
         const { games, unmatched } = buildGamesFromEvents(events, nameToId)
 
         // El calendario ya trae el abridor probable (hydrate). Descargamos de una
-        // vez los ratings FIP de los abridores de juegos pendientes, para que los
-        // marcadores y probabilidades ya salgan ajustados por lanzador.
+        // vez los ratings FIP de los abridores de juegos pendientes y los factores
+        // de bullpen por equipo, para que marcadores y probabilidades ya salgan
+        // ajustados por pitcheo.
         let pitchers = get().pitchers
+        let bullpens = get().bullpens
         let rated = 0
         try {
           const ids = new Set<string>()
@@ -336,8 +325,9 @@ export const useStore = create<StoreState>()(
             rated = Object.keys(fresh).length
           }
         } catch { /* el calendario se carga aunque falle la descarga de abridores */ }
+        try { bullpens = { ...bullpens, ...(await fetchBullpenFactors(season, nameToId)) } } catch { /* opcional */ }
 
-        set((s) => ({ games, pitchers, scheduleSource: 'mlb-stats-api', predictions: predictWithCtx(games, s.teams, pitchers) }))
+        set((s) => ({ games, pitchers, bullpens, scheduleSource: 'mlb-stats-api', predictions: predictWithCtx(games, s.teams, pitchers, bullpens) }))
         return { added: games.length, unmatched, rated }
       },
 
@@ -362,7 +352,7 @@ export const useStore = create<StoreState>()(
               }
             }
             const games = [...byId.values()]
-            return { games, predictions: predictWithCtx(games, s.teams, s.pitchers) }
+            return { games, predictions: predictWithCtx(games, s.teams, s.pitchers, s.bullpens) }
           })
         } catch {
           errors.push('No se pudo conectar con MLB Stats API')
@@ -372,7 +362,7 @@ export const useStore = create<StoreState>()(
 
       syncPitchers: async () => {
         try {
-          const { games, teams, pitchers } = get()
+          const { games, teams, pitchers, bullpens } = get()
           if (!games.some((g) => g.id.startsWith('MLB'))) {
             return { rated: 0, patched: 0, errors: ['Primero sincroniza el calendario oficial (pestaña Calendario → “Sincronizar calendario oficial”).'] }
           }
@@ -408,7 +398,9 @@ export const useStore = create<StoreState>()(
 
           const fresh = await fetchPitcherRatings([...ids], season)
           const merged = { ...pitchers, ...fresh }
-          set({ games: newGames, pitchers: merged, predictions: predictWithCtx(newGames, teams, merged) })
+          let mergedBull = bullpens
+          try { mergedBull = { ...bullpens, ...(await fetchBullpenFactors(season, buildNameToId(TEAMS))) } } catch { /* opcional */ }
+          set({ games: newGames, pitchers: merged, bullpens: mergedBull, predictions: predictWithCtx(newGames, teams, merged, mergedBull) })
           return { rated: Object.keys(fresh).length, patched, errors: [] }
         } catch {
           return { rated: 0, patched: 0, errors: ['No se pudieron obtener los abridores desde MLB Stats API'] }
@@ -422,17 +414,31 @@ export const useStore = create<StoreState>()(
             return { games: hist.length, brier: null, teamsUpdated: 0, errors: ['Historial insuficiente: coloca ≥200 juegos en /public/history.csv (ver HISTORY_DATA.md).'] }
           }
 
-          const { teams, games, pitchers } = get()
+          const { teams, games, pitchers, bullpens } = get()
           const seedFallback = Object.fromEntries(
             Object.values(teams).map((t) => [t.id, { attack: t.attack, defense: t.defense }]),
           )
           const refDate = new Date().toISOString().slice(0, 10)
-          const maherParams = { ...DEFAULT_MAHER_PARAMS, refDate }
 
-          // Ratings Maher (log-espacio) → ataque/defensa lineal del store (attack = e^α,
-          // defense = e^β). Con la forma-producto de computeLambdas esto reproduce
-          // exactamente el modelo Maher calibrado con historial real.
-          const ratings = estimateRatings(hist, maherParams, seedFallback)
+          // Grid-search: busca los hiperparámetros que MINIMIZAN el Brier de
+          // holdout (15% final no visto). Es el modelo óptimo dado tus datos, en
+          // vez de parámetros fijados a mano.
+          const grid = cartesianGrid({
+            homeAdv:  [0.06, 0.10, 0.14],
+            xi:       [0.001, 0.002, 0.004],
+            tauPrior: [10, 20, 40],
+          })
+          const gs = gridSearchHoldout(hist, grid, maherFactory(seedFallback, refDate), 0.85)
+          const best = {
+            xi:       gs.best.xi       ?? DEFAULT_MAHER_PARAMS.xi,
+            tauPrior: gs.best.tauPrior ?? DEFAULT_MAHER_PARAMS.tauPrior,
+            homeAdv:  gs.best.homeAdv  ?? DEFAULT_MAHER_PARAMS.homeAdv,
+          }
+
+          // Ratings Maher (log-espacio) con los MEJORES parámetros → ataque/defensa
+          // lineal del store (attack = e^α, defense = e^β). Con la forma-producto de
+          // computeLambdas esto reproduce el modelo Maher calibrado con datos reales.
+          const ratings = estimateRatings(hist, { ...best, refDate }, seedFallback)
           const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x))
           const round2 = (x: number) => Math.round(x * 100) / 100
 
@@ -448,24 +454,16 @@ export const useStore = create<StoreState>()(
             teamsUpdated++
           }
 
-          // Calidad del modelo: Brier de holdout sobre el 15% final del historial.
-          const bt = holdoutBacktest(
-            hist,
-            maherFactory(seedFallback, refDate),
-            { xi: maherParams.xi, tauPrior: maherParams.tauPrior, homeAdv: maherParams.homeAdv },
-            0.85,
-          )
-
-          set({ teams: newTeams, predictions: predictWithCtx(games, newTeams, pitchers) })
-          return { games: hist.length, brier: bt.n > 0 ? bt.avgBrier : null, teamsUpdated, errors: [] }
+          set({ teams: newTeams, predictions: predictWithCtx(games, newTeams, pitchers, bullpens) })
+          return { games: hist.length, brier: Number.isFinite(gs.bestBrier) ? gs.bestBrier : null, teamsUpdated, errors: [] }
         } catch {
           return { games: 0, brier: null, teamsUpdated: 0, errors: ['Error al calibrar desde el historial'] }
         }
       },
 
       exportJSON: () => {
-        const { teams, games, odds, personalPicks, pitchers, postseasonSeries, postseasonSeeds, valueThreshold, kellyFraction } = get()
-        return JSON.stringify({ teams, games, odds, personalPicks, pitchers, postseasonSeries, postseasonSeeds, valueThreshold, kellyFraction }, null, 2)
+        const { teams, games, odds, pitchers, bullpens, postseasonSeries, postseasonSeeds, valueThreshold, kellyFraction } = get()
+        return JSON.stringify({ teams, games, odds, pitchers, bullpens, postseasonSeries, postseasonSeeds, valueThreshold, kellyFraction }, null, 2)
       },
 
       importJSON: (json) => {
@@ -474,17 +472,18 @@ export const useStore = create<StoreState>()(
           const teams: Record<string, Team> = data.teams ?? buildInitialTeams()
           const games: Game[] = data.games ?? buildInitialGames()
           const pitchers: Record<string, PitcherRating> = data.pitchers ?? {}
+          const bullpens: Record<string, number> = data.bullpens ?? {}
           set({
             teams,
             games,
             odds: data.odds ?? {},
-            personalPicks: data.personalPicks ?? {},
             pitchers,
+            bullpens,
             postseasonSeries: data.postseasonSeries ?? [],
             postseasonSeeds: data.postseasonSeeds ?? null,
             valueThreshold: data.valueThreshold ?? 0.03,
             kellyFraction: data.kellyFraction ?? 0.5,
-            predictions: predictWithCtx(games, teams, pitchers),
+            predictions: predictWithCtx(games, teams, pitchers, bullpens),
           })
         } catch {
           console.error('Error al importar JSON')
@@ -495,7 +494,7 @@ export const useStore = create<StoreState>()(
         const teams = buildInitialTeams()
         const games = buildInitialGames()
         set({
-          teams, games, odds: {}, personalPicks: {}, pitchers: {}, postseasonSeries: [], postseasonSeeds: null,
+          teams, games, odds: {}, pitchers: {}, bullpens: {}, postseasonSeries: [], postseasonSeeds: null,
           predictions: predictAll(games, teams),
           valueThreshold: 0.03, kellyFraction: 0.5, scheduleSource: 'synthetic',
         })
@@ -508,8 +507,8 @@ export const useStore = create<StoreState>()(
         teams: s.teams,
         games: s.games,
         odds: s.odds,
-        personalPicks: s.personalPicks,
         pitchers: s.pitchers,
+        bullpens: s.bullpens,
         postseasonSeries: s.postseasonSeries,
         postseasonSeeds: s.postseasonSeeds,
         valueThreshold: s.valueThreshold,
@@ -517,7 +516,7 @@ export const useStore = create<StoreState>()(
         scheduleSource: s.scheduleSource,
       }),
       onRehydrateStorage: () => (state) => {
-        if (state) state.predictions = predictWithCtx(state.games, state.teams, state.pitchers ?? {})
+        if (state) state.predictions = predictWithCtx(state.games, state.teams, state.pitchers ?? {}, state.bullpens ?? {})
       },
     },
   ),

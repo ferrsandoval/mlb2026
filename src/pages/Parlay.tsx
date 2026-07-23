@@ -4,7 +4,7 @@ import PageHeader from '../components/PageHeader'
 import type { Team } from '../data/seed'
 import type { GamePrediction } from '../types'
 
-type BetType = 'moneyline' | 'over' | 'under' | 'run_line_home' | 'run_line_away' | 'exact'
+type BetType = 'moneyline' | 'over' | 'under'
 
 interface ParlayPick {
   gameLabel: string
@@ -28,47 +28,41 @@ function american(dec: number): string {
 }
 
 const typeLabels: Record<BetType, string> = {
-  moneyline: 'Moneyline', over: 'Total', under: 'Total', run_line_home: 'Run line', run_line_away: 'Run line', exact: 'Marcador exacto',
+  moneyline: 'Ganador', over: 'Total', under: 'Total',
 }
 
+// Solo dos mercados de béisbol: GANADOR (moneyline) y TOTAL (over/under).
+// Los tramos se distinguen por número de selecciones (más piernas = más riesgo):
+//   Segura 3 · Moderada 4-5 · Riesgosa 5-9.
 function generateParlays(games: GameWithPred[]): { safe: ParlayPick[]; moderate: ParlayPick[]; risky: ParlayPick[] } {
-  const allPicks: ParlayPick[] = []
+  const pool: ParlayPick[] = []
   for (const g of games) {
     const base = { gameLabel: g.label, homeTeam: g.homeTeam, awayTeam: g.awayTeam, date: g.date }
     const p = g.pred
-    if (p.probHome > p.probAway) allPicks.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.homeTeam.id}`, prob: p.probHome, fairOdds: fairOdds(p.probHome) })
-    else allPicks.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.awayTeam.id}`, prob: p.probAway, fairOdds: fairOdds(p.probAway) })
-    allPicks.push({ ...base, betType: 'over', betLabel: `Over ${p.runLine} carreras`, prob: p.probOver, fairOdds: fairOdds(p.probOver) })
-    allPicks.push({ ...base, betType: 'under', betLabel: `Under ${p.runLine} carreras`, prob: p.probUnder, fairOdds: fairOdds(p.probUnder) })
-    allPicks.push({ ...base, betType: 'run_line_home', betLabel: `${g.homeTeam.id} -1.5`, prob: p.probHomeMinus15, fairOdds: fairOdds(p.probHomeMinus15) })
-    allPicks.push({ ...base, betType: 'run_line_away', betLabel: `${g.awayTeam.id} +1.5`, prob: p.probAwayPlus15, fairOdds: fairOdds(p.probAwayPlus15) })
-    const top = p.topScorelines[0]
-    allPicks.push({ ...base, betType: 'exact', betLabel: `Exacto ${top.away}–${top.home}`, prob: top.prob, fairOdds: fairOdds(top.prob) })
+    // Ganador: el favorito del modelo.
+    if (p.probHome >= p.probAway) pool.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.homeTeam.id}`, prob: p.probHome, fairOdds: fairOdds(p.probHome) })
+    else pool.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.awayTeam.id}`, prob: p.probAway, fairOdds: fairOdds(p.probAway) })
+    // Total: el lado más probable (over o under).
+    if (p.probOver >= p.probUnder) pool.push({ ...base, betType: 'over', betLabel: `Over ${p.runLine} carreras`, prob: p.probOver, fairOdds: fairOdds(p.probOver) })
+    else pool.push({ ...base, betType: 'under', betLabel: `Under ${p.runLine} carreras`, prob: p.probUnder, fairOdds: fairOdds(p.probUnder) })
+  }
+  pool.sort((a, b) => b.prob - a.prob) // de mayor a menor probabilidad
+
+  // Toma las `target` selecciones más probables: primero una por juego (su mejor
+  // mercado); si aún faltan, completa con el segundo mercado de juegos ya usados.
+  const selectLegs = (target: number): ParlayPick[] => {
+    const out: ParlayPick[] = []
+    const used = new Set<string>()
+    for (const p of pool) { if (out.length >= target) break; if (!used.has(p.gameLabel)) { out.push(p); used.add(p.gameLabel) } }
+    for (const p of pool) { if (out.length >= target) break; if (!out.includes(p)) out.push(p) }
+    return out
   }
 
-  const safe: ParlayPick[] = []
-  for (const g of games) {
-    const candidates = allPicks.filter((p) => p.gameLabel === g.label && p.betType === 'moneyline' && p.prob > 0.58).sort((a, b) => b.prob - a.prob)
-    if (candidates[0]) safe.push(candidates[0])
+  return {
+    safe: selectLegs(3),      // 3 selecciones (las más seguras)
+    moderate: selectLegs(5),  // 4-5 selecciones
+    risky: selectLegs(9),     // 5-9 selecciones
   }
-
-  const moderate: ParlayPick[] = []
-  const used = new Set<string>()
-  const winners = allPicks.filter((p) => p.betType === 'moneyline').sort((a, b) => b.prob - a.prob)
-  if (winners[0]) { moderate.push(winners[0]); used.add(winners[0].gameLabel) }
-  const ouPicks = allPicks.filter((p) => (p.betType === 'over' || p.betType === 'under') && !used.has(p.gameLabel)).sort((a, b) => b.prob - a.prob)
-  if (ouPicks[0]) { moderate.push(ouPicks[0]); used.add(ouPicks[0].gameLabel) }
-  const rlPicks = allPicks.filter((p) => (p.betType === 'run_line_home' || p.betType === 'run_line_away') && !used.has(p.gameLabel)).sort((a, b) => b.prob - a.prob)
-  if (rlPicks[0]) moderate.push(rlPicks[0])
-
-  const risky: ParlayPick[] = []
-  const riskyMl = allPicks.filter((p) => p.betType === 'moneyline').sort((a, b) => b.prob - a.prob)
-  if (riskyMl[0]) risky.push(riskyMl[0])
-  if (riskyMl[1]) risky.push(riskyMl[1])
-  const exactPicks = allPicks.filter((p) => p.betType === 'exact').sort((a, b) => b.prob - a.prob)
-  if (exactPicks[0]) risky.push(exactPicks[0])
-
-  return { safe, moderate, risky }
 }
 
 function ParlayColumn({ tier, accent, picks }: { tier: string; accent: string; picks: ParlayPick[] }) {
@@ -150,7 +144,7 @@ export default function Parlay() {
       <PageHeader
         eyebrow="Parlay · Combinadas"
         title="Combinadas del día"
-        subtitle={`${dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1)} · ${todayGames.length} juego${todayGames.length > 1 ? 's' : ''} · modelo Elo+Poisson`}
+        subtitle={`${dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1)} · ${todayGames.length} juego${todayGames.length > 1 ? 's' : ''} · solo ganador y total (over/under)`}
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 14, alignItems: 'start' }}>

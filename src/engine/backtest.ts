@@ -134,6 +134,30 @@ export function gridSearch(
   return { best: rows[0].params, bestBrier: rows[0].avgBrier, rows }
 }
 
+/**
+ * Grid-search con evaluación de holdout (barato). Prueba cada combinación de
+ * parámetros entrenando una sola vez y ordena por Brier de la porción no vista.
+ * Devuelve la mejor combinación — el modelo "óptimo dado tus datos".
+ */
+export function gridSearchHoldout(
+  games: HistGame[],
+  paramGrid: Record<string, number>[],
+  factory: PredictorFactory,
+  trainFrac = 0.85,
+): GridSearchResult {
+  if (paramGrid.length === 0) return { best: {}, bestBrier: Infinity, rows: [] }
+
+  const rows: GridSearchRow[] = []
+  for (const params of paramGrid) {
+    const r = holdoutBacktest(games, factory, params, trainFrac)
+    if (r.n > 0) rows.push({ params, avgBrier: r.avgBrier, avgLogLoss: r.avgLogLoss })
+  }
+  if (rows.length === 0) return { best: {}, bestBrier: Infinity, rows: [] }
+
+  rows.sort((a, b) => a.avgBrier - b.avgBrier)
+  return { best: rows[0].params, bestBrier: rows[0].avgBrier, rows }
+}
+
 export function cartesianGrid(grid: Record<string, number[]>): Record<string, number>[] {
   const keys = Object.keys(grid)
   const values = keys.map((k) => grid[k])

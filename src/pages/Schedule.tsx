@@ -21,7 +21,7 @@ function StatChip({ label, value, color }: { label: string; value: React.ReactNo
 }
 
 export default function Schedule() {
-  const { teams, games, predictions, personalPicks, odds, valueThreshold, kellyFraction, scheduleSource, syncSchedule } = useStore()
+  const { teams, games, predictions, odds, valueThreshold, kellyFraction, scheduleSource, syncSchedule } = useStore()
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null)
   const [selectedTeam, setSelectedTeam] = useState<string>('')
   const [syncMsg, setSyncMsg] = useState('')
@@ -52,6 +52,21 @@ export default function Schedule() {
 
   const doneCount = shown.filter((g) => g.played).length
 
+  // Aciertos/fallos del día (juegos terminados): ganador y total (over/under).
+  const dayTally = useMemo(() => {
+    let wHit = 0, wMiss = 0, tHit = 0, tMiss = 0
+    for (const g of shown) {
+      if (!g.played || g.homeRuns == null || g.awayRuns == null) continue
+      const p = predictions[g.id]
+      if (!p) continue
+      const realHomeWon = g.homeRuns > g.awayRuns
+      const realOver = g.homeRuns + g.awayRuns > p.runLine
+      if ((p.probHome >= p.probAway) === realHomeWon) wHit++; else wMiss++
+      if ((p.probOver >= p.probUnder) === realOver) tHit++; else tMiss++
+    }
+    return { wHit, wMiss, tHit, tMiss }
+  }, [shown, predictions])
+
   const handleSyncSchedule = async () => {
     setSyncing(true); setSyncMsg('')
     try {
@@ -63,16 +78,19 @@ export default function Schedule() {
   }
 
   if (selectedGameId) {
-    const game = games.find((g) => g.id === selectedGameId)!
-    return (
-      <GameDetail
-        game={game}
-        homeTeam={teams[game.homeId]}
-        awayTeam={teams[game.awayId]}
-        prediction={predictions[game.id]}
-        onBack={() => setSelectedGameId(null)}
-      />
-    )
+    const game = games.find((g) => g.id === selectedGameId)
+    const pred = game && predictions[game.id]
+    if (game && pred) {
+      return (
+        <GameDetail
+          game={game}
+          homeTeam={teams[game.homeId]}
+          awayTeam={teams[game.awayId]}
+          prediction={pred}
+          onBack={() => setSelectedGameId(null)}
+        />
+      )
+    }
   }
 
   const title = byTeam
@@ -126,6 +144,12 @@ export default function Schedule() {
         <StatChip label="Juegos" value={shown.length} />
         <StatChip label="Con valor" value={valueCount} color="var(--green)" />
         <StatChip label="Finalizados" value={doneCount} />
+        {doneCount > 0 && (
+          <StatChip label="Ganador (día)" value={<><span style={{ color: 'var(--green)' }}>{dayTally.wHit}✓</span> <span style={{ color: 'var(--red-b)' }}>{dayTally.wMiss}✗</span></>} />
+        )}
+        {doneCount > 0 && (
+          <StatChip label="Total O/U (día)" value={<><span style={{ color: 'var(--green)' }}>{dayTally.tHit}✓</span> <span style={{ color: 'var(--red-b)' }}>{dayTally.tMiss}✗</span></>} />
+        )}
       </div>
 
       {shown.length === 0 ? (
@@ -142,7 +166,6 @@ export default function Schedule() {
                 homeTeam={teams[game.homeId]}
                 awayTeam={teams[game.awayId]}
                 prediction={pred}
-                personalPick={personalPicks[game.id]}
                 onClick={() => setSelectedGameId(game.id)}
               />
             )

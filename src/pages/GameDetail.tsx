@@ -4,8 +4,8 @@ import TeamBadge from '../components/TeamBadge'
 import ValueBadge from '../components/ValueBadge'
 import type { Game, Team } from '../data/seed'
 import type { GamePrediction, OddsInput } from '../types'
-import { pickOutcome, pExactScore, pCorrectOutcome } from '../engine/personalPicks'
 import { analyzeValue } from '../engine/value'
+import { parkFactor } from '../engine/parkFactors'
 
 interface Props {
   game: Game
@@ -16,17 +16,14 @@ interface Props {
 }
 
 export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBack }: Props) {
-  const { odds, setOdds, valueThreshold, kellyFraction, personalPicks, setPersonalPick, registerResult } = useStore()
+  const { odds, setOdds, valueThreshold, kellyFraction, registerResult } = useStore()
   const pitchers = useStore((s) => s.pitchers)
   const homePitcher = game.homePitcherId ? pitchers[game.homePitcherId] : undefined
   const awayPitcher = game.awayPitcherId ? pitchers[game.awayPitcherId] : undefined
 
   const storedOdds = odds[game.id] ?? { home: null, away: null }
-  const personalPick = personalPicks[game.id] ?? null
 
   const [localOdds, setLocalOdds] = useState<OddsInput>(storedOdds)
-  const [draftHome, setDraftHome] = useState<string>(personalPick ? String(personalPick.homeRuns) : '')
-  const [draftAway, setDraftAway] = useState<string>(personalPick ? String(personalPick.awayRuns) : '')
   const [resHome, setResHome] = useState<string>(game.homeRuns != null ? String(game.homeRuns) : '')
   const [resAway, setResAway] = useState<string>(game.awayRuns != null ? String(game.awayRuns) : '')
 
@@ -47,33 +44,6 @@ export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBac
   const pct = (n: number) => (n * 100).toFixed(1) + '%'
   const fmt2 = (n: number) => n.toFixed(2)
 
-  function PickStats({ pick, label, accentColor }: { pick: { homeRuns: number; awayRuns: number }; label: string; accentColor: string }) {
-    const pExacto = pExactScore(pick.homeRuns, pick.awayRuns, prediction.lambdaHome, prediction.lambdaAway)
-    const pResultado = pCorrectOutcome(pick, prediction.probHome, prediction.probAway)
-    const outcome = pickOutcome(pick)
-    const outcomeLabel = outcome === 'home' ? homeTeam.name : awayTeam.name
-    return (
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl p-4 text-center" style={{ backgroundColor: 'var(--color-bg-base)' }}>
-          <p className="text-xs mb-1 font-bold" style={{ color: accentColor }}>{label}</p>
-          <p className="font-black text-3xl" style={{ color: 'var(--color-gray-light)' }}>{pick.homeRuns}–{pick.awayRuns}</p>
-          <p className="font-bold text-2xl mt-1" style={{ color: pExacto >= 0.08 ? 'var(--color-positive)' : pExacto >= 0.03 ? 'var(--color-gray-light)' : 'var(--color-accent)' }}>
-            {pct(pExacto)}
-          </p>
-          <p className="text-xs mt-1" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>Marcador exacto</p>
-        </div>
-        <div className="rounded-xl p-4 text-center" style={{ backgroundColor: 'var(--color-bg-base)' }}>
-          <p className="text-xs mb-1 font-bold" style={{ color: accentColor }}>Resultado</p>
-          <p className="font-black text-3xl" style={{ color: accentColor }}>{outcomeLabel}</p>
-          <p className="font-bold text-2xl mt-1" style={{ color: pResultado >= 0.55 ? 'var(--color-positive)' : pResultado >= 0.35 ? 'var(--color-gray-light)' : 'var(--color-accent)' }}>
-            {pct(pResultado)}
-          </p>
-          <p className="text-xs mt-1" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>P(acertar ganador)</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div>
       <button onClick={onBack} className="flex items-center gap-2 text-sm mb-6 transition-opacity hover:opacity-70" style={{ color: 'var(--color-gray-light)' }}>
@@ -84,6 +54,7 @@ export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBac
       <div className="rounded-xl p-6 mb-4" style={{ backgroundColor: 'var(--color-bg-card)' }}>
         <div className="text-xs mb-4" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>
           {game.date} · {homeTeam.venue}, {homeTeam.city}
+          {(() => { const pf = parkFactor(homeTeam.id); return pf !== 1 ? ` · Parque ×${pf.toFixed(2)} (${pf > 1 ? 'ofensivo' : 'pitcher-friendly'})` : '' })()}
         </div>
         <div className="flex items-center justify-center gap-6">
           <div className="text-center flex-1 flex flex-col items-center gap-2">
@@ -91,10 +62,12 @@ export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBac
             <p className="font-black text-2xl uppercase" style={{ color: 'var(--color-gray-light)' }}>{homeTeam.name}</p>
             <p className="text-sm" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>Elo {homeTeam.elo}</p>
             <p className="text-lg font-bold" style={{ color: 'var(--color-primary-light)' }}>λ {fmt2(prediction.lambdaHome)}</p>
-            {homePitcher && (
+            {homePitcher ? (
               <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.6 }}>
                 ⚾ {homePitcher.name} · FIP {fmt2(homePitcher.fip)}
               </p>
+            ) : !game.played && (
+              <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>⚾ Abridor por confirmar</p>
             )}
           </div>
           <div className="text-center shrink-0">
@@ -109,10 +82,12 @@ export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBac
             <p className="font-black text-2xl uppercase" style={{ color: 'var(--color-gray-light)' }}>{awayTeam.name}</p>
             <p className="text-sm" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>Elo {awayTeam.elo}</p>
             <p className="text-lg font-bold" style={{ color: 'var(--color-accent)' }}>λ {fmt2(prediction.lambdaAway)}</p>
-            {awayPitcher && (
+            {awayPitcher ? (
               <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.6 }}>
                 ⚾ {awayPitcher.name} · FIP {fmt2(awayPitcher.fip)}
               </p>
+            ) : !game.played && (
+              <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>⚾ Abridor por confirmar</p>
             )}
           </div>
         </div>
@@ -169,39 +144,6 @@ export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBac
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Tu predicción */}
-        <div className="rounded-xl p-5" style={{ backgroundColor: 'var(--color-bg-card)', borderLeft: '3px solid var(--color-accent)' }}>
-          <h3 className="font-bold text-lg uppercase mb-4" style={{ color: 'var(--color-accent)' }}>Tu Predicción</h3>
-          <div className="flex items-center gap-3 mb-5 flex-wrap">
-            <span className="text-sm font-bold" style={{ color: 'var(--color-gray-light)' }}>{homeTeam.id}</span>
-            <input type="number" min="0" max="30" value={draftHome} onChange={(e) => setDraftHome(e.target.value)}
-              className="w-14 text-center rounded-lg px-2 py-2 text-lg font-black outline-none"
-              style={{ backgroundColor: 'var(--color-bg-base)', color: 'var(--color-gray-light)', border: '1px solid var(--color-accent)' }} />
-            <span className="font-black text-2xl" style={{ color: 'var(--color-gray-dark)' }}>–</span>
-            <input type="number" min="0" max="30" value={draftAway} onChange={(e) => setDraftAway(e.target.value)}
-              className="w-14 text-center rounded-lg px-2 py-2 text-lg font-black outline-none"
-              style={{ backgroundColor: 'var(--color-bg-base)', color: 'var(--color-gray-light)', border: '1px solid var(--color-accent)' }} />
-            <span className="text-sm font-bold" style={{ color: 'var(--color-gray-light)' }}>{awayTeam.id}</span>
-            <button
-              onClick={() => {
-                const h = parseInt(draftHome, 10), a = parseInt(draftAway, 10)
-                if (!isNaN(h) && !isNaN(a) && h >= 0 && a >= 0) setPersonalPick(game.id, { homeRuns: h, awayRuns: a })
-              }}
-              className="px-4 py-2 rounded-lg text-sm font-bold" style={{ backgroundColor: 'var(--color-accent)', color: 'white' }}>
-              Guardar
-            </button>
-            {personalPick && (
-              <button onClick={() => { setPersonalPick(game.id, null); setDraftHome(''); setDraftAway('') }}
-                className="px-4 py-2 rounded-lg text-sm font-bold" style={{ backgroundColor: 'var(--color-bg-base)', color: 'var(--color-accent)', border: '1px solid var(--color-accent)' }}>
-                Borrar
-              </button>
-            )}
-          </div>
-          {personalPick ? <PickStats pick={personalPick} label="Tu marcador" accentColor="var(--color-accent)" /> : (
-            <p className="text-sm text-center py-4" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>Ingresa tu marcador y presiona Guardar</p>
-          )}
         </div>
 
         {/* Registrar resultado real */}

@@ -91,6 +91,8 @@ export interface LambdaResult {
 export interface MatchupContext {
   homePitcherFactor?: number
   awayPitcherFactor?: number
+  /** Factor de carreras del estadio (multiplica AMBAS λ). 1 = neutral. Ver parkFactors.ts. */
+  parkFactor?: number
 }
 
 /**
@@ -114,11 +116,12 @@ export function computeLambdas(
   const offHome = homeTeam.attack * awayTeam.defense
   const offAway = awayTeam.attack * homeTeam.defense
 
-  const suppressHome = ctx.awayPitcherFactor ?? 1 // abridor visitante frena al local
-  const suppressAway = ctx.homePitcherFactor ?? 1 // abridor local frena al visitante
+  const suppressHome = ctx.awayPitcherFactor ?? 1 // pitcheo visitante frena al local
+  const suppressAway = ctx.homePitcherFactor ?? 1 // pitcheo local frena al visitante
+  const park = ctx.parkFactor ?? 1               // entorno del estadio (afecta a ambos)
 
-  const lambdaHome = Math.max(params.MIN_LAMBDA, (B + supremacy / 2) * offHome * suppressHome)
-  const lambdaAway = Math.max(params.MIN_LAMBDA, (B - supremacy / 2) * offAway * suppressAway)
+  const lambdaHome = Math.max(params.MIN_LAMBDA, (B + supremacy / 2) * offHome * suppressHome * park)
+  const lambdaAway = Math.max(params.MIN_LAMBDA, (B - supremacy / 2) * offAway * suppressAway * park)
 
   return { lambdaHome, lambdaAway }
 }

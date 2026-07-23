@@ -66,37 +66,80 @@ function SyncButton({ state, msg, onClick }: { state: SyncState; msg: string; on
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('calendario')
+  const syncSchedule = useStore((s) => s.syncSchedule)
   const syncScores = useStore((s) => s.syncScores)
+  const syncPitchers = useStore((s) => s.syncPitchers)
+  const calibrateFromHistory = useStore((s) => s.calibrateFromHistory)
   const [syncState, setSyncState] = useState<SyncState>('idle')
   const [syncMsg, setSyncMsg] = useState('')
 
-  const handleSync = useCallback(async (silent = false) => {
-    setSyncState('loading')
-    if (!silent) setSyncMsg('')
+  // ── Sincronización automática con MLB Stats API (sin clicks) ────────────────
+  // Al abrir: si aún hay calendario sintético, carga el oficial (que ya baja los
+  // ratings FIP de abridores) y calibra con historial si existe. Luego, en
+  // segundo plano: resultados cada 5 min y abridores probables cada 30 min.
+
+  const flash = useCallback((state: SyncState, msg: string) => {
+    setSyncState(state)
+    setSyncMsg(msg)
+    if (state === 'ok') setTimeout(() => { setSyncState('idle'); setSyncMsg('') }, 4000)
+  }, [])
+
+  const refreshLive = useCallback(async (opts: { silent?: boolean } = {}) => {
+    const { silent = true } = opts
+    if (!silent) setSyncState('loading')
     try {
       const r = await syncScores()
-      if (r.errors.length) {
-        setSyncState(silent ? 'idle' : 'error')
-        if (!silent) setSyncMsg('Sin conexión con MLB Stats API')
-      } else {
-        setSyncState('ok')
-        setSyncMsg(r.updated > 0 ? `${r.updated} resultado${r.updated > 1 ? 's' : ''} nuevo${r.updated > 1 ? 's' : ''}` : (silent ? '' : 'Sin novedades'))
-        setTimeout(() => { setSyncState('idle'); if (!silent || r.updated === 0) setSyncMsg('') }, 4000)
+      let rated = 0
+      if (useStore.getState().scheduleSource === 'mlb-stats-api') {
+        try { rated = (await syncPitchers()).rated } catch { /* ignora abridores */ }
       }
+
+      if (r.errors.length) { flash('idle', ''); return }
+      const parts: string[] = []
+      if (r.updated) parts.push(`${r.updated} resultado${r.updated > 1 ? 's' : ''}`)
+      if (rated) parts.push(`${rated} abridores`)
+      flash('ok', parts.join(' · '))
     } catch {
-      setSyncState(silent ? 'idle' : 'error')
-      if (!silent) setSyncMsg('Error de red')
+      flash(silent ? 'idle' : 'error', silent ? '' : 'Error de red')
     }
-  }, [syncScores])
+  }, [syncScores, syncPitchers, flash])
+
+  // Disparo manual desde el botón "MLB Live": fuerza refresco completo.
+  const handleManualSync = useCallback(async () => {
+    setSyncState('loading'); setSyncMsg('')
+    try {
+      if (useStore.getState().scheduleSource === 'synthetic') {
+        try { await syncSchedule() } catch { /* seguirá con resultados */ }
+      }
+      await refreshLive({ silent: false })
+    } catch { flash('error', 'Sin conexión con MLB Stats API') }
+  }, [syncSchedule, refreshLive, flash])
 
   const autoSyncStarted = useRef(false)
   useEffect(() => {
     if (autoSyncStarted.current) return
     autoSyncStarted.current = true
-    handleSync(true)
-    const interval = setInterval(() => handleSync(true), 5 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [handleSync])
+
+    ;(async () => {
+      setSyncState('loading')
+      // 1) Bootstrap único: calendario oficial + abridores. Solo en instalación
+      //    nueva (sintético y sin resultados registrados), para no pisar trabajo manual.
+      const st = useStore.getState()
+      if (st.scheduleSource === 'synthetic' && !st.games.some((g) => g.played)) {
+        try { await syncSchedule() } catch { /* sin conexión: se queda sintético */ }
+      }
+      // 2) Calibración con historial (no-op silencioso si no hay /history.csv).
+      try { await calibrateFromHistory() } catch { /* opcional */ }
+      // 3) Primer refresco de resultados + abridores.
+      await refreshLive({ silent: true })
+    })()
+
+    const scores = setInterval(() => refreshLive({ silent: true }), 5 * 60 * 1000)
+    const pitchers = setInterval(() => {
+      if (useStore.getState().scheduleSource === 'mlb-stats-api') syncPitchers().catch(() => {})
+    }, 30 * 60 * 1000)
+    return () => { clearInterval(scores); clearInterval(pitchers) }
+  }, [syncSchedule, calibrateFromHistory, refreshLive, syncPitchers])
 
   const navButtons = TABS.map(({ id, label, icon }) => (
     <button key={id} onClick={() => setTab(id)} className={`pn-navbtn${tab === id ? ' is-active' : ''}`}>
@@ -113,7 +156,7 @@ export default function App() {
           <PennantLogo size={30} />
           <div style={{ fontFamily: 'var(--fd)', fontWeight: 700, fontSize: 15, letterSpacing: '.06em' }}>PENNANT</div>
         </div>
-        <SyncButton state={syncState} msg={syncMsg} onClick={() => handleSync()} />
+        <SyncButton state={syncState} msg={syncMsg} onClick={handleManualSync} />
       </div>
 
       {/* Sidebar / barra inferior */}
@@ -131,7 +174,7 @@ export default function App() {
         <div className="pn-navlist">{navButtons}</div>
 
         <div className="pn-navfoot">
-          <SyncButton state={syncState} msg={syncMsg} onClick={() => handleSync()} />
+          <SyncButton state={syncState} msg={syncMsg} onClick={handleManualSync} />
           <div style={{ fontSize: 11, color: 'var(--green)', fontFamily: 'var(--fm)', display: 'flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 8px var(--green)' }} />
             modelo activo

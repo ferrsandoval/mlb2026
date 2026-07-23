@@ -1,6 +1,5 @@
 // Tipos centrales — Team y Game viven en data/seed.ts (fuente de verdad)
 export type { Team, Game, League, Division, DivisionKey } from './data/seed'
-export type { PersonalPick } from './engine/personalPicks'
 
 // ─── Motor estadístico ──────────────────────────────────────────────────────
 

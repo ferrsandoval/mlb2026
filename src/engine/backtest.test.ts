@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { holdoutBacktest, walkForwardBacktest } from './backtest'
+import { holdoutBacktest, walkForwardBacktest, gridSearchHoldout, cartesianGrid } from './backtest'
 import { maherFactory } from './ratings'
 import { FLAT_BRIER } from './scoring'
 import type { HistGame } from '../data/histTypes'
@@ -45,5 +45,26 @@ describe('holdoutBacktest', () => {
     const hist = makeHistory().slice(0, 120)
     const wf = walkForwardBacktest(hist, maherFactory(seedFallback, '2025-12-31'), params, 40)
     expect(wf.avgBrier).toBeLessThan(FLAT_BRIER)
+  })
+})
+
+describe('gridSearchHoldout', () => {
+  it('elige la mejor combinación de parámetros por Brier', () => {
+    const hist = makeHistory()
+    const grid = cartesianGrid({ homeAdv: [0.06, 0.10], xi: [0.001, 0.004], tauPrior: [10, 40] })
+    const gs = gridSearchHoldout(hist, grid, maherFactory(seedFallback, '2025-12-31'), 0.8)
+    expect(gs.rows.length).toBe(8)
+    expect(gs.bestBrier).toBeLessThan(FLAT_BRIER)
+    // el primero es el de menor Brier
+    expect(gs.rows[0].avgBrier).toBe(gs.bestBrier)
+    for (const r of gs.rows) expect(r.avgBrier).toBeGreaterThanOrEqual(gs.bestBrier)
+    // best coincide con los params de la fila top
+    expect(gs.best).toEqual(gs.rows[0].params)
+  })
+
+  it('grid vacío → sin resultados', () => {
+    const gs = gridSearchHoldout(makeHistory(), [], maherFactory(seedFallback, '2025-12-31'))
+    expect(gs.rows.length).toBe(0)
+    expect(gs.bestBrier).toBe(Infinity)
   })
 })
