@@ -22,6 +22,11 @@ const ML: Record<MLResult, { label: string; color: string; border: string; bg: s
   miss: { label: 'Fallo',   color: 'var(--red-b)', border: 'rgba(232,66,89,.4)',  bg: 'rgba(232,66,89,.1)' },
 }
 
+/** Momio americano → texto con signo. */
+const fmtAm = (n: number): string => (n > 0 ? `+${n}` : `${n}`)
+/** Momio americano → cuota decimal (para el comparador de valor). */
+const amToDec = (n: number): number => (n > 0 ? 1 + n / 100 : 1 + 100 / -n)
+
 /** Prob (0..1) del favorito → cuota americana justa del modelo. */
 function americanFair(probHome: number): { code: 'home' | 'away'; txt: string } {
   const favHome = probHome >= 0.5
@@ -62,8 +67,10 @@ const GameCard = memo(function GameCard({ game, homeTeam, awayTeam, prediction, 
   const fair = americanFair(prediction.probHome)
   const fairCode = fair.code === 'home' ? homeTeam.id : awayTeam.id
 
-  // Valor (requiere cuotas ingresadas por el usuario)
-  const va = odds ? analyzeValue(odds, { home: prediction.probHome, away: prediction.probAway }, valueThreshold, kellyFraction) : null
+  // Valor: usa las cuotas del usuario si las hay; si no, las reales de ESPN.
+  const realOdds = game.mlHome != null && game.mlAway != null ? { home: amToDec(game.mlHome), away: amToDec(game.mlAway) } : null
+  const effOdds = odds ?? realOdds
+  const va = effOdds ? analyzeValue(effOdds, { home: prediction.probHome, away: prediction.probAway }, valueThreshold, kellyFraction) : null
   let valueTxt: string | null = null
   if (va) {
     const h = va.markets.home, a = va.markets.away
@@ -126,8 +133,8 @@ const GameCard = memo(function GameCard({ game, homeTeam, awayTeam, prediction, 
 
       <div style={{ marginTop: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--fm)', fontSize: 11, color: 'var(--muted)', marginBottom: 5 }}>
-          <span>{awayTeam.id} {pct(prediction.probAway)}%</span>
-          <span>{homeTeam.id} {pct(prediction.probHome)}%</span>
+          <span>{awayTeam.id} {pct(prediction.probAway)}%{game.mlAway != null && <span style={{ color: 'var(--faint)' }}> · {fmtAm(game.mlAway)}</span>}</span>
+          <span>{game.mlHome != null && <span style={{ color: 'var(--faint)' }}>{fmtAm(game.mlHome)} · </span>}{homeTeam.id} {pct(prediction.probHome)}%</span>
         </div>
         <ProbBar probHome={prediction.probHome} probAway={prediction.probAway} homeColor={homeTeam.primaryColor} awayColor={awayTeam.primaryColor} />
       </div>

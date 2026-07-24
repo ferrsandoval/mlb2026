@@ -99,12 +99,13 @@ export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBac
           <h3 className="font-bold text-lg uppercase mb-4" style={{ color: 'var(--color-gray-light)' }}>Probabilidades</h3>
           <div className="space-y-3">
             {[
-              { label: homeTeam.name, prob: prediction.probHome, color: 'var(--color-primary)' },
-              { label: awayTeam.name, prob: prediction.probAway, color: 'var(--color-accent)' },
-            ].map(({ label, prob, color }) => (
+              { label: homeTeam.name, prob: prediction.probHome, color: 'var(--color-primary)', ml: game.mlHome },
+              { label: awayTeam.name, prob: prediction.probAway, color: 'var(--color-accent)', ml: game.mlAway },
+            ].map(({ label, prob, color, ml }) => (
               <div key={label}>
                 <div className="flex justify-between text-sm mb-1" style={{ color: 'var(--color-gray-light)' }}>
-                  <span>{label}</span><span className="font-bold">{pct(prob)}</span>
+                  <span>{label}{ml != null && <span style={{ opacity: 0.55 }}> · casa {ml > 0 ? `+${ml}` : ml}</span>}</span>
+                  <span className="font-bold">{pct(prob)}</span>
                 </div>
                 <div className="h-3 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-bg-base)' }}>
                   <div className="h-full rounded-full" style={{ width: pct(prob), backgroundColor: color }} />

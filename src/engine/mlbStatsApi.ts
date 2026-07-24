@@ -187,10 +187,11 @@ export interface ScoreSyncResult {
   errors: string[]
 }
 
-// ─── Líneas de total (over/under) por juego — API pública de ESPN ──────────────
+// ─── Líneas de apuestas por juego (total + moneyline) — API pública de ESPN ────
 // La MLB Stats API no publica líneas de apuestas; ESPN sí (sin API key, CORS
-// abierto). Las líneas se publican ~1 día antes del juego y varían por partido
-// (7.5, 8, 8.5, 9, 9.5…). Clave del mapa: `${date}|${awayId}|${homeId}`.
+// abierto, momios de DraftKings). Se publican ~1 día antes. El total varía por
+// juego (7.5, 8, 8.5, 9…); el moneyline es el momio americano real de cada lado.
+// Clave del mapa: `${date}|${awayId}|${homeId}`.
 
 const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard'
 
@@ -198,18 +199,31 @@ const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/baseball/
 const ESPN_ABBR_TO_ID: Record<string, string> = { CHW: 'CWS' }
 const espnId = (abbr: string): string => ESPN_ABBR_TO_ID[abbr] ?? abbr
 
+/** Momio americano ("-294"/"+234") → número; undefined si no es válido. */
+const parseAmerican = (v: unknown): number | undefined => {
+  const n = Number(v)
+  return Number.isFinite(n) && n !== 0 ? n : undefined
+}
+
+interface EspnSide { close?: { odds?: string } }
 interface EspnScoreboard {
   events?: Array<{
     competitions?: Array<{
-      odds?: Array<{ overUnder?: number }>
+      odds?: Array<{ overUnder?: number; moneyline?: { home?: EspnSide; away?: EspnSide } }>
       competitors?: Array<{ homeAway?: string; team?: { abbreviation?: string } }>
     }>
   }>
 }
 
-/** Trae la línea de total por juego para las fechas dadas. Mapa key→overUnder. */
-export async function fetchTotals(dates: string[]): Promise<Record<string, number>> {
-  const totals: Record<string, number> = {}
+export interface MarketLine {
+  total?: number   // línea over/under
+  mlHome?: number  // moneyline americano real del local
+  mlAway?: number  // moneyline americano real del visitante
+}
+
+/** Trae total + moneyline real por juego para las fechas dadas. */
+export async function fetchMarketLines(dates: string[]): Promise<Record<string, MarketLine>> {
+  const lines: Record<string, MarketLine> = {}
   for (const date of [...new Set(dates)]) {
     try {
       const ymd = date.replace(/-/g, '')
@@ -218,16 +232,23 @@ export async function fetchTotals(dates: string[]): Promise<Record<string, numbe
       const data = (await res.json()) as EspnScoreboard
       for (const ev of data.events ?? []) {
         const comp = ev.competitions?.[0]
-        const ou = comp?.odds?.[0]?.overUnder
-        if (comp == null || ou == null) continue
+        const o = comp?.odds?.[0]
+        if (comp == null || o == null) continue
         const home = comp.competitors?.find((c) => c.homeAway === 'home')?.team?.abbreviation
         const away = comp.competitors?.find((c) => c.homeAway === 'away')?.team?.abbreviation
         if (!home || !away) continue
-        totals[`${date}|${espnId(away)}|${espnId(home)}`] = Number(ou)
+        const line: MarketLine = {
+          total: o.overUnder != null ? Number(o.overUnder) : undefined,
+          mlHome: parseAmerican(o.moneyline?.home?.close?.odds),
+          mlAway: parseAmerican(o.moneyline?.away?.close?.odds),
+        }
+        if (line.total != null || line.mlHome != null || line.mlAway != null) {
+          lines[`${date}|${espnId(away)}|${espnId(home)}`] = line
+        }
       }
     } catch { /* ignora fechas que fallen */ }
   }
-  return totals
+  return lines
 }
 
 // ─── Factores de bullpen por equipo (relevistas) ──────────────────────────────

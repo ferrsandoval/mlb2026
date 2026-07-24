@@ -40,6 +40,8 @@ export interface Game {
   homePitcherId?: string; // abridor probable local (id de la MLB Stats API, como string)
   awayPitcherId?: string; // abridor probable visitante
   runLine?: number;       // línea de total (over/under) real del juego; default 8.5 si no hay
+  mlHome?: number;        // moneyline americano real del local (referencia, ESPN/DraftKings)
+  mlAway?: number;        // moneyline americano real del visitante
 }
 
 // -----------------------------------------------------------------------------

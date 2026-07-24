@@ -16,7 +16,7 @@ import {
 } from '../data/postseason'
 import type { Series, SeedEntry } from '../data/postseason'
 import { computeLeagueStandings, computeDivisionWinners, computeWildCardStandings } from '../engine/standings'
-import { fetchMlbSchedule, buildNameToId, buildGamesFromEvents, fetchPitcherRatings, fetchBullpenFactors, fetchTotals } from '../engine/mlbStatsApi'
+import { fetchMlbSchedule, buildNameToId, buildGamesFromEvents, fetchPitcherRatings, fetchBullpenFactors, fetchMarketLines } from '../engine/mlbStatsApi'
 import { buildMatchupContext } from '../engine/pitchers'
 import type { PitcherRating } from '../engine/pitchers'
 import { loadHistoricalGames } from '../data/historicalLoader'
@@ -58,7 +58,7 @@ interface StoreState {
   syncSchedule: () => Promise<{ added: number; unmatched: string[]; rated: number }>
   syncScores: () => Promise<{ updated: number; errors: string[] }>
   syncPitchers: () => Promise<{ rated: number; patched: number; errors: string[] }>
-  syncTotals: () => Promise<{ updated: number; errors: string[] }>
+  syncLines: () => Promise<{ updated: number; errors: string[] }>
   calibrateFromHistory: () => Promise<{ games: number; brier: number | null; teamsUpdated: number; errors: string[] }>
 
   exportJSON: () => string
@@ -408,7 +408,7 @@ export const useStore = create<StoreState>()(
         }
       },
 
-      syncTotals: async () => {
+      syncLines: async () => {
         try {
           const { games, teams, pitchers, bullpens } = get()
           const today = new Date().toISOString().slice(0, 10)
@@ -416,20 +416,27 @@ export const useStore = create<StoreState>()(
           const dates = [...new Set(games.filter((g) => !g.played && g.date >= today).map((g) => g.date))].sort().slice(0, 4)
           if (dates.length === 0) return { updated: 0, errors: [] }
 
-          const totals = await fetchTotals(dates)
-          if (Object.keys(totals).length === 0) return { updated: 0, errors: [] }
+          const lines = await fetchMarketLines(dates)
+          if (Object.keys(lines).length === 0) return { updated: 0, errors: [] }
 
           let updated = 0
           const newGames = games.map((g) => {
-            const ou = totals[`${g.date}|${g.awayId}|${g.homeId}`]
-            if (ou != null && ou !== g.runLine) { updated++; return { ...g, runLine: ou } }
+            const l = lines[`${g.date}|${g.awayId}|${g.homeId}`]
+            if (!l) return g
+            const runLine = l.total ?? g.runLine
+            const mlHome = l.mlHome ?? g.mlHome
+            const mlAway = l.mlAway ?? g.mlAway
+            if (runLine !== g.runLine || mlHome !== g.mlHome || mlAway !== g.mlAway) {
+              updated++
+              return { ...g, runLine, mlHome, mlAway }
+            }
             return g
           })
           if (updated === 0) return { updated: 0, errors: [] }
           set({ games: newGames, predictions: predictWithCtx(newGames, teams, pitchers, bullpens) })
           return { updated, errors: [] }
         } catch {
-          return { updated: 0, errors: ['No se pudieron obtener las líneas de total (ESPN)'] }
+          return { updated: 0, errors: ['No se pudieron obtener las líneas (ESPN)'] }
         }
       },
 

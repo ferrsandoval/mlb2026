@@ -44,8 +44,13 @@ export default function Schedule() {
   const shown = byTeam ? teamGames : dateGames
 
   const valueCount = useMemo(() => shown.filter((g) => {
-    const o = odds[g.id]; const p = predictions[g.id]
-    if (!o || !p) return false
+    const p = predictions[g.id]
+    if (!p) return false
+    const real = g.mlHome != null && g.mlAway != null
+      ? { home: g.mlHome > 0 ? 1 + g.mlHome / 100 : 1 + 100 / -g.mlHome, away: g.mlAway > 0 ? 1 + g.mlAway / 100 : 1 + 100 / -g.mlAway }
+      : null
+    const o = odds[g.id] ?? real
+    if (!o) return false
     const va = analyzeValue(o, { home: p.probHome, away: p.probAway }, valueThreshold, kellyFraction)
     return !!va && (va.markets.home.hasValue || va.markets.away.hasValue)
   }).length, [shown, odds, predictions, valueThreshold, kellyFraction])
