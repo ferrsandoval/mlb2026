@@ -105,7 +105,7 @@ export default function Settings() {
           <button onClick={handleSyncPitchers} disabled={pitcherBusy}
             className="font-bold text-sm px-5 py-3 rounded-lg transition-opacity disabled:opacity-40 text-left"
             style={{ backgroundColor: 'var(--color-bg-base)', color: 'var(--color-gray-light)', border: '1px solid var(--color-primary)' }}>
-            <span className="block">{pitcherBusy ? '⟳ Obteniendo abridores…' : '⚾ Sincronizar abridores probables'}</span>
+            <span className="block">{pitcherBusy ? 'Obteniendo abridores…' : 'Sincronizar abridores probables'}</span>
             <span className="block text-xs font-normal mt-1" style={{ opacity: 0.55 }}>
               Trae el FIP del abridor de cada juego pendiente ({Object.keys(pitchers).length} con rating)
             </span>
@@ -113,7 +113,7 @@ export default function Settings() {
           <button onClick={handleCalibrate} disabled={calibBusy}
             className="font-bold text-sm px-5 py-3 rounded-lg transition-opacity disabled:opacity-40 text-left"
             style={{ backgroundColor: 'var(--color-bg-base)', color: 'var(--color-gray-light)', border: '1px solid var(--color-primary)' }}>
-            <span className="block">{calibBusy ? '⟳ Calibrando…' : '📈 Calibrar ratings con historial'}</span>
+            <span className="block">{calibBusy ? 'Calibrando…' : 'Calibrar ratings con historial'}</span>
             <span className="block text-xs font-normal mt-1" style={{ opacity: 0.55 }}>
               Ajusta ataque/defensa con /history.csv (Maher) y reporta el Brier
             </span>

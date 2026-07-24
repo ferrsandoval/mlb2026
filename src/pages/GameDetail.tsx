@@ -6,6 +6,7 @@ import type { Game, Team } from '../data/seed'
 import type { GamePrediction, OddsInput } from '../types'
 import { analyzeValue } from '../engine/value'
 import { parkFactor } from '../engine/parkFactors'
+import BaseballIcon from '../components/BaseballIcon'
 
 interface Props {
   game: Game
@@ -63,11 +64,11 @@ export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBac
             <p className="text-sm" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>Elo {homeTeam.elo}</p>
             <p className="text-lg font-bold" style={{ color: 'var(--color-primary-light)' }}>λ {fmt2(prediction.lambdaHome)}</p>
             {homePitcher ? (
-              <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.6 }}>
-                ⚾ {homePitcher.name} · FIP {fmt2(homePitcher.fip)}
+              <p className="text-xs flex items-center justify-center gap-1" style={{ color: 'var(--color-gray-light)', opacity: 0.6 }}>
+                <BaseballIcon size={11} /> {homePitcher.name} · FIP {fmt2(homePitcher.fip)}
               </p>
             ) : !game.played && (
-              <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>⚾ Abridor por confirmar</p>
+              <p className="text-xs flex items-center justify-center gap-1" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}><BaseballIcon size={11} /> Abridor por confirmar</p>
             )}
           </div>
           <div className="text-center shrink-0">
@@ -83,11 +84,11 @@ export default function GameDetail({ game, homeTeam, awayTeam, prediction, onBac
             <p className="text-sm" style={{ color: 'var(--color-gray-light)', opacity: 0.5 }}>Elo {awayTeam.elo}</p>
             <p className="text-lg font-bold" style={{ color: 'var(--color-accent)' }}>λ {fmt2(prediction.lambdaAway)}</p>
             {awayPitcher ? (
-              <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.6 }}>
-                ⚾ {awayPitcher.name} · FIP {fmt2(awayPitcher.fip)}
+              <p className="text-xs flex items-center justify-center gap-1" style={{ color: 'var(--color-gray-light)', opacity: 0.6 }}>
+                <BaseballIcon size={11} /> {awayPitcher.name} · FIP {fmt2(awayPitcher.fip)}
               </p>
             ) : !game.played && (
-              <p className="text-xs" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}>⚾ Abridor por confirmar</p>
+              <p className="text-xs flex items-center justify-center gap-1" style={{ color: 'var(--color-gray-light)', opacity: 0.4 }}><BaseballIcon size={11} /> Abridor por confirmar</p>
             )}
           </div>
         </div>

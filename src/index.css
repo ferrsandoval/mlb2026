@@ -137,7 +137,8 @@ a:hover { color: #7fbaff; }
 }
 .pn-navbtn:hover { color: var(--text); background: rgba(255, 255, 255, .04); }
 .pn-navbtn.is-active { color: var(--text); background: var(--surface-2); font-weight: 600; box-shadow: inset 3px 0 0 var(--red); }
-.pn-navico { font-size: 15px; width: 20px; text-align: center; opacity: .9; }
+.pn-navico { font-size: 15px; width: 22px; display: inline-flex; align-items: center; justify-content: center; opacity: .85; }
+.pn-navico svg { display: block; }
 .pn-navlbl { white-space: nowrap; }
 
 .pn-main { flex: 1; min-width: 0; padding: 30px 34px 48px; overflow-x: hidden; }

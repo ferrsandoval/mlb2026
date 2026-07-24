@@ -5,6 +5,7 @@ import { useStore } from '../store/useStore'
 import { analyzeValue } from '../engine/value'
 import ProbBar from './ProbBar'
 import TeamBadge from './TeamBadge'
+import BaseballIcon from './BaseballIcon'
 
 interface Props {
   game: Game
@@ -90,11 +91,12 @@ const GameCard = memo(function GameCard({ game, homeTeam, awayTeam, prediction, 
         <div style={{ minWidth: 0 }}>
           <div style={{ fontFamily: 'var(--fd)', fontWeight: 600, fontSize: 15, lineHeight: 1 }}>{team.id}</div>
           {pitcher ? (
-            <div style={{ fontSize: 11, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              ⚾ {pitcher.name} <span style={{ opacity: 0.7 }}>· FIP {pitcher.fip.toFixed(2)}</span>
+            <div style={{ fontSize: 11, color: 'var(--faint)', display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
+              <BaseballIcon size={11} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pitcher.name} <span style={{ opacity: 0.7 }}>· FIP {pitcher.fip.toFixed(2)}</span></span>
             </div>
           ) : !has ? (
-            <div style={{ fontSize: 11, color: 'var(--faint)', opacity: 0.7 }}>⚾ Abridor por confirmar</div>
+            <div style={{ fontSize: 11, color: 'var(--faint)', opacity: 0.7, display: 'flex', alignItems: 'center', gap: 5 }}><BaseballIcon size={11} /> Abridor por confirmar</div>
           ) : (
             <div style={{ fontSize: 11, color: 'var(--faint)' }}>{role}</div>
           )}
@@ -109,12 +111,12 @@ const GameCard = memo(function GameCard({ game, homeTeam, awayTeam, prediction, 
       onClick={onClick}
       style={{
         display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
-        background: 'linear-gradient(180deg,#20304a,#1a293f)',
-        border: '1px solid var(--border-2)', borderRadius: 14, padding: '15px 16px',
-        boxShadow: 'var(--sh)', position: 'relative', overflow: 'hidden', transition: 'border-color .15s',
+        background: 'linear-gradient(180deg,var(--surface-2),var(--surface))',
+        border: '1px solid var(--border)', borderRadius: 'var(--r3)', padding: '15px 16px',
+        boxShadow: 'var(--sh)', position: 'relative', overflow: 'hidden', transition: 'border-color .15s, transform .15s',
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'rgba(255,255,255,.28)')}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-2)')}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'none' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <span style={{ fontFamily: 'var(--fm)', fontSize: 11, letterSpacing: '.06em', color: has ? 'var(--red-b)' : 'var(--faint)' }}>

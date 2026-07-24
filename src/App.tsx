@@ -9,13 +9,27 @@ import Settings from './pages/Settings'
 
 type Tab = 'calendario' | 'posiciones' | 'postemporada' | 'parlay' | 'aciertos' | 'ajustes'
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'calendario',   label: 'Calendario',   icon: '▦' },
-  { id: 'posiciones',   label: 'Posiciones',   icon: '≣' },
-  { id: 'postemporada', label: 'Postemporada', icon: '⑃' },
-  { id: 'parlay',       label: 'Parlay',       icon: '⧉' },
-  { id: 'aciertos',     label: 'Aciertos',     icon: '◎' },
-  { id: 'ajustes',      label: 'Ajustes',      icon: '⚙' },
+// Iconos de línea propios (SVG) — trazo consistente, currentColor, escala con em.
+const svg = {
+  viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7,
+  strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, width: '1.35em', height: '1.35em',
+}
+const ICONS: Record<Tab, React.ReactNode> = {
+  calendario: <svg {...svg}><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" /><path d="M3.5 9.5h17M8 3v3.5M16 3v3.5" /></svg>,
+  posiciones: <svg {...svg}><circle cx="5" cy="6" r="1.3" /><circle cx="5" cy="12" r="1.3" /><circle cx="5" cy="18" r="1.3" /><path d="M9.5 6h11M9.5 12h11M9.5 18h7" /></svg>,
+  postemporada: <svg {...svg}><path d="M4 6h3.5a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2h1.5M4 18h3.5a2 2 0 0 0 2-2v-2a2 2 0 0 1 2-2M13 12h4" /><circle cx="19" cy="12" r="1.6" /></svg>,
+  parlay: <svg {...svg}><rect x="3.5" y="3.5" width="11" height="11" rx="2.5" /><rect x="9.5" y="9.5" width="11" height="11" rx="2.5" /></svg>,
+  aciertos: <svg {...svg}><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.2" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /></svg>,
+  ajustes: <svg {...svg}><path d="M5 8h8M16 8h3M5 16h3M11 16h8" /><circle cx="14.5" cy="8" r="2" /><circle cx="9" cy="16" r="2" /></svg>,
+}
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'calendario',   label: 'Calendario' },
+  { id: 'posiciones',   label: 'Posiciones' },
+  { id: 'postemporada', label: 'Postemporada' },
+  { id: 'parlay',       label: 'Parlay' },
+  { id: 'aciertos',     label: 'Aciertos' },
+  { id: 'ajustes',      label: 'Ajustes' },
 ]
 
 type SyncState = 'idle' | 'loading' | 'ok' | 'error'
@@ -143,9 +157,9 @@ export default function App() {
     return () => { clearInterval(scores); clearInterval(pitchers) }
   }, [syncSchedule, calibrateFromHistory, refreshLive, syncPitchers])
 
-  const navButtons = TABS.map(({ id, label, icon }) => (
+  const navButtons = TABS.map(({ id, label }) => (
     <button key={id} onClick={() => setTab(id)} className={`pn-navbtn${tab === id ? ' is-active' : ''}`}>
-      <span className="pn-navico">{icon}</span>
+      <span className="pn-navico">{ICONS[id]}</span>
       <span className="pn-navlbl">{label}</span>
     </button>
   ))
