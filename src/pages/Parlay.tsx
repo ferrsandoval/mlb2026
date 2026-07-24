@@ -31,37 +31,40 @@ const typeLabels: Record<BetType, string> = {
   moneyline: 'Ganador', over: 'Total', under: 'Total',
 }
 
-// Solo dos mercados de béisbol: GANADOR (moneyline) y TOTAL (over/under).
-// Los tramos se distinguen por número de selecciones (más piernas = más riesgo):
-//   Segura 3 · Moderada 4-5 · Riesgosa 5-9.
+// Dos mercados: GANADOR (moneyline) y TOTAL (over/under).
+//   Segura   → 3, SOLO moneyline.
+//   Moderada → 5, prioriza moneyline (mínimo over/under posible).
+//   Riesgosa → hasta 15, prioriza moneyline (mínimo over/under posible).
+// Over/under solo se usa para completar cuando ya no quedan ganadores de juegos
+// distintos (típicamente en la riesgosa cuando hay pocos juegos).
 function generateParlays(games: GameWithPred[]): { safe: ParlayPick[]; moderate: ParlayPick[]; risky: ParlayPick[] } {
-  const pool: ParlayPick[] = []
+  const mlPicks: ParlayPick[] = []
+  const ouPicks: ParlayPick[] = []
   for (const g of games) {
     const base = { gameLabel: g.label, homeTeam: g.homeTeam, awayTeam: g.awayTeam, date: g.date }
     const p = g.pred
-    // Ganador: el favorito del modelo.
-    if (p.probHome >= p.probAway) pool.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.homeTeam.id}`, prob: p.probHome, fairOdds: fairOdds(p.probHome) })
-    else pool.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.awayTeam.id}`, prob: p.probAway, fairOdds: fairOdds(p.probAway) })
-    // Total: el lado más probable (over o under).
-    if (p.probOver >= p.probUnder) pool.push({ ...base, betType: 'over', betLabel: `Over ${p.runLine} carreras`, prob: p.probOver, fairOdds: fairOdds(p.probOver) })
-    else pool.push({ ...base, betType: 'under', betLabel: `Under ${p.runLine} carreras`, prob: p.probUnder, fairOdds: fairOdds(p.probUnder) })
+    if (p.probHome >= p.probAway) mlPicks.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.homeTeam.id}`, prob: p.probHome, fairOdds: fairOdds(p.probHome) })
+    else mlPicks.push({ ...base, betType: 'moneyline', betLabel: `Gana ${g.awayTeam.id}`, prob: p.probAway, fairOdds: fairOdds(p.probAway) })
+    if (p.probOver >= p.probUnder) ouPicks.push({ ...base, betType: 'over', betLabel: `Over ${p.runLine} carreras`, prob: p.probOver, fairOdds: fairOdds(p.probOver) })
+    else ouPicks.push({ ...base, betType: 'under', betLabel: `Under ${p.runLine} carreras`, prob: p.probUnder, fairOdds: fairOdds(p.probUnder) })
   }
-  pool.sort((a, b) => b.prob - a.prob) // de mayor a menor probabilidad
+  mlPicks.sort((a, b) => b.prob - a.prob)
+  ouPicks.sort((a, b) => b.prob - a.prob)
 
-  // Toma las `target` selecciones más probables: primero una por juego (su mejor
-  // mercado); si aún faltan, completa con el segundo mercado de juegos ya usados.
-  const selectLegs = (target: number): ParlayPick[] => {
+  // Prioriza moneyline (un ganador por juego); solo si aún faltan piernas,
+  // completa con over/under (mínimo posible).
+  const preferML = (target: number): ParlayPick[] => {
     const out: ParlayPick[] = []
     const used = new Set<string>()
-    for (const p of pool) { if (out.length >= target) break; if (!used.has(p.gameLabel)) { out.push(p); used.add(p.gameLabel) } }
-    for (const p of pool) { if (out.length >= target) break; if (!out.includes(p)) out.push(p) }
+    for (const p of mlPicks) { if (out.length >= target) break; if (!used.has(p.gameLabel)) { out.push(p); used.add(p.gameLabel) } }
+    for (const p of ouPicks) { if (out.length >= target) break; out.push(p) }
     return out
   }
 
   return {
-    safe: selectLegs(3),      // 3 selecciones (las más seguras)
-    moderate: selectLegs(5),  // 4-5 selecciones
-    risky: selectLegs(9),     // 5-9 selecciones
+    safe: mlPicks.slice(0, 3), // solo moneyline (los 3 favoritos más probables)
+    moderate: preferML(5),     // 4-5, mínimo over/under
+    risky: preferML(15),       // hasta 15, mínimo over/under
   }
 }
 
