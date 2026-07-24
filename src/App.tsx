@@ -170,7 +170,7 @@ export default function App() {
       <div className="pn-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <PennantLogo size={30} />
-          <div style={{ fontFamily: 'var(--fd)', fontWeight: 700, fontSize: 15, letterSpacing: '.06em' }}>PENNANT</div>
+          <div style={{ fontFamily: 'var(--fh)', fontWeight: 600, fontSize: 18, letterSpacing: '0' }}>Pennant</div>
         </div>
         <SyncButton state={syncState} msg={syncMsg} onClick={handleManualSync} />
       </div>
@@ -181,7 +181,7 @@ export default function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
             <PennantLogo size={40} />
             <div>
-              <div style={{ fontFamily: 'var(--fd)', fontWeight: 700, fontSize: 16, lineHeight: 1, letterSpacing: '.06em' }}>PENNANT</div>
+              <div style={{ fontFamily: 'var(--fh)', fontWeight: 600, fontSize: 20, lineHeight: 1, letterSpacing: '0' }}>Pennant</div>
               <div style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 4, fontFamily: 'var(--fm)' }}>MLB Analytics · 2026</div>
             </div>
           </div>

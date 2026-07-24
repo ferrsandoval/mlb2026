@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Libre+Franklin:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 /* =============================================================================
@@ -29,9 +29,11 @@
   --muted: #93A7BE;
   --faint: #5d7186;
 
-  --fd: 'Space Grotesk', system-ui, sans-serif;
-  --fu: 'Hanken Grotesk', system-ui, sans-serif;
-  --fm: 'Space Mono', ui-monospace, monospace;
+  /* Sistema editorial: serif de titulares + sans Franklin + mono de datos. */
+  --fh: 'Fraunces', Georgia, 'Times New Roman', serif;         /* titulares (editorial) */
+  --fd: 'Libre Franklin', system-ui, sans-serif;                /* display/UI (códigos, valores) */
+  --fu: 'Libre Franklin', system-ui, sans-serif;                /* cuerpo */
+  --fm: 'IBM Plex Mono', ui-monospace, monospace;               /* números/datos tabulares */
 
   --r1: 6px;
   --r2: 10px;
@@ -72,13 +74,19 @@ body {
   margin: 0;
   overflow-x: hidden; /* ningún elemento debe provocar scroll horizontal en móvil */
   background:
-    radial-gradient(1200px 700px at 80% -10%, rgba(76, 154, 255, .06), transparent 60%),
-    radial-gradient(900px 600px at -10% 10%, rgba(200, 16, 46, .06), transparent 55%),
+    radial-gradient(1200px 700px at 80% -10%, rgba(76, 154, 255, .05), transparent 60%),
+    radial-gradient(900px 600px at -10% 10%, rgba(200, 16, 46, .05), transparent 55%),
     #060d16;
   color: var(--text);
   font-family: var(--fu);
+  font-variant-numeric: tabular-nums;  /* cifras alineadas (marcadores, cuotas, %) */
+  font-optical-sizing: auto;           /* Fraunces usa su corte display en titulares */
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
+
+/* Titulares editoriales en serif (se aplica con la clase, no a todo h1/h2/h3) */
+.pn-serif { font-family: var(--fh); font-optical-sizing: auto; }
 
 input, select, button, textarea { font-family: inherit; }
 a { color: var(--blue); text-decoration: none; }
