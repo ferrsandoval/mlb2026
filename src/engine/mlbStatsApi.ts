@@ -187,6 +187,49 @@ export interface ScoreSyncResult {
   errors: string[]
 }
 
+// ─── Líneas de total (over/under) por juego — API pública de ESPN ──────────────
+// La MLB Stats API no publica líneas de apuestas; ESPN sí (sin API key, CORS
+// abierto). Las líneas se publican ~1 día antes del juego y varían por partido
+// (7.5, 8, 8.5, 9, 9.5…). Clave del mapa: `${date}|${awayId}|${homeId}`.
+
+const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard'
+
+// Abreviaturas ESPN → id del seed (idénticas salvo los White Sox: CHW→CWS).
+const ESPN_ABBR_TO_ID: Record<string, string> = { CHW: 'CWS' }
+const espnId = (abbr: string): string => ESPN_ABBR_TO_ID[abbr] ?? abbr
+
+interface EspnScoreboard {
+  events?: Array<{
+    competitions?: Array<{
+      odds?: Array<{ overUnder?: number }>
+      competitors?: Array<{ homeAway?: string; team?: { abbreviation?: string } }>
+    }>
+  }>
+}
+
+/** Trae la línea de total por juego para las fechas dadas. Mapa key→overUnder. */
+export async function fetchTotals(dates: string[]): Promise<Record<string, number>> {
+  const totals: Record<string, number> = {}
+  for (const date of [...new Set(dates)]) {
+    try {
+      const ymd = date.replace(/-/g, '')
+      const res = await fetch(`${ESPN_SCOREBOARD}?dates=${ymd}`)
+      if (!res.ok) continue
+      const data = (await res.json()) as EspnScoreboard
+      for (const ev of data.events ?? []) {
+        const comp = ev.competitions?.[0]
+        const ou = comp?.odds?.[0]?.overUnder
+        if (comp == null || ou == null) continue
+        const home = comp.competitors?.find((c) => c.homeAway === 'home')?.team?.abbreviation
+        const away = comp.competitors?.find((c) => c.homeAway === 'away')?.team?.abbreviation
+        if (!home || !away) continue
+        totals[`${date}|${espnId(away)}|${espnId(home)}`] = Number(ou)
+      }
+    } catch { /* ignora fechas que fallen */ }
+  }
+  return totals
+}
+
 // ─── Factores de bullpen por equipo (relevistas) ──────────────────────────────
 
 interface RawTeamStats {

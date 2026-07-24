@@ -16,7 +16,7 @@ import {
 } from '../data/postseason'
 import type { Series, SeedEntry } from '../data/postseason'
 import { computeLeagueStandings, computeDivisionWinners, computeWildCardStandings } from '../engine/standings'
-import { fetchMlbSchedule, buildNameToId, buildGamesFromEvents, fetchPitcherRatings, fetchBullpenFactors } from '../engine/mlbStatsApi'
+import { fetchMlbSchedule, buildNameToId, buildGamesFromEvents, fetchPitcherRatings, fetchBullpenFactors, fetchTotals } from '../engine/mlbStatsApi'
 import { buildMatchupContext } from '../engine/pitchers'
 import type { PitcherRating } from '../engine/pitchers'
 import { loadHistoricalGames } from '../data/historicalLoader'
@@ -58,6 +58,7 @@ interface StoreState {
   syncSchedule: () => Promise<{ added: number; unmatched: string[]; rated: number }>
   syncScores: () => Promise<{ updated: number; errors: string[] }>
   syncPitchers: () => Promise<{ rated: number; patched: number; errors: string[] }>
+  syncTotals: () => Promise<{ updated: number; errors: string[] }>
   calibrateFromHistory: () => Promise<{ games: number; brier: number | null; teamsUpdated: number; errors: string[] }>
 
   exportJSON: () => string
@@ -404,6 +405,31 @@ export const useStore = create<StoreState>()(
           return { rated: Object.keys(fresh).length, patched, errors: [] }
         } catch {
           return { rated: 0, patched: 0, errors: ['No se pudieron obtener los abridores desde MLB Stats API'] }
+        }
+      },
+
+      syncTotals: async () => {
+        try {
+          const { games, teams, pitchers, bullpens } = get()
+          const today = new Date().toISOString().slice(0, 10)
+          // ESPN publica las líneas ~1 día antes; tomamos las fechas próximas con juegos pendientes.
+          const dates = [...new Set(games.filter((g) => !g.played && g.date >= today).map((g) => g.date))].sort().slice(0, 4)
+          if (dates.length === 0) return { updated: 0, errors: [] }
+
+          const totals = await fetchTotals(dates)
+          if (Object.keys(totals).length === 0) return { updated: 0, errors: [] }
+
+          let updated = 0
+          const newGames = games.map((g) => {
+            const ou = totals[`${g.date}|${g.awayId}|${g.homeId}`]
+            if (ou != null && ou !== g.runLine) { updated++; return { ...g, runLine: ou } }
+            return g
+          })
+          if (updated === 0) return { updated: 0, errors: [] }
+          set({ games: newGames, predictions: predictWithCtx(newGames, teams, pitchers, bullpens) })
+          return { updated, errors: [] }
+        } catch {
+          return { updated: 0, errors: ['No se pudieron obtener las líneas de total (ESPN)'] }
         }
       },
 

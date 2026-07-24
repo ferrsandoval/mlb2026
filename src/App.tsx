@@ -69,6 +69,7 @@ export default function App() {
   const syncSchedule = useStore((s) => s.syncSchedule)
   const syncScores = useStore((s) => s.syncScores)
   const syncPitchers = useStore((s) => s.syncPitchers)
+  const syncTotals = useStore((s) => s.syncTotals)
   const calibrateFromHistory = useStore((s) => s.calibrateFromHistory)
   const [syncState, setSyncState] = useState<SyncState>('idle')
   const [syncMsg, setSyncMsg] = useState('')
@@ -92,6 +93,7 @@ export default function App() {
       let rated = 0
       if (useStore.getState().scheduleSource === 'mlb-stats-api') {
         try { rated = (await syncPitchers()).rated } catch { /* ignora abridores */ }
+        try { await syncTotals() } catch { /* ignora líneas de total */ }
       }
 
       if (r.errors.length) { flash('idle', ''); return }
@@ -102,7 +104,7 @@ export default function App() {
     } catch {
       flash(silent ? 'idle' : 'error', silent ? '' : 'Error de red')
     }
-  }, [syncScores, syncPitchers, flash])
+  }, [syncScores, syncPitchers, syncTotals, flash])
 
   // Disparo manual desde el botón "MLB Live": fuerza refresco completo.
   const handleManualSync = useCallback(async () => {

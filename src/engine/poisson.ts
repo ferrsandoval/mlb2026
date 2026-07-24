@@ -211,14 +211,14 @@ export function buildScoreMatrix(
 // ─── Predicción completa ──────────────────────────────────────────────────────
 
 export function predictGame(
-  game: Pick<Game, 'id' | 'homeId' | 'awayId'>,
+  game: Pick<Game, 'id' | 'homeId' | 'awayId' | 'runLine'>,
   homeTeam: Pick<Team, 'elo' | 'attack' | 'defense'>,
   awayTeam: Pick<Team, 'elo' | 'attack' | 'defense'>,
   params = ENGINE_PARAMS,
   ctx: MatchupContext = {},
 ): GamePrediction {
   const { lambdaHome, lambdaAway } = computeLambdas(homeTeam, awayTeam, params, ctx)
-  const matrix = buildScoreMatrix(lambdaHome, lambdaAway, params)
+  const matrix = buildScoreMatrix(lambdaHome, lambdaAway, params, game.runLine ?? 8.5)
 
   return {
     gameId: game.id,
